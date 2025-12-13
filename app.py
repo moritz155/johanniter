@@ -1,0 +1,638 @@
+# Mission Control - Backend (Reload Triggered)
+from flask import Flask, render_template, request, jsonify, send_file
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+import io
+import csv
+import os
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# --- Models ---
+
+# Association Table for Many-to-Many between Mission and Squad
+mission_squad = db.Table('mission_squad',
+    db.Column('mission_id', db.Integer, db.ForeignKey('mission.id'), primary_key=True),
+    db.Column('squad_id', db.Integer, db.ForeignKey('squad.id'), primary_key=True)
+)
+
+class ShiftConfig(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    location = db.Column(db.String(200))
+    address = db.Column(db.String(200), nullable=True) # New field
+    start_time = db.Column(db.DateTime, default=datetime.utcnow)
+    end_time = db.Column(db.DateTime, nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+
+    def to_dict(self):
+        return {
+            'location': self.location,
+            'address': self.address,
+            'start_time': (self.start_time.isoformat() + 'Z') if self.start_time else None,
+            'end_time': (self.end_time.isoformat() + 'Z') if self.end_time else None,
+            'is_active': self.is_active
+        }
+
+class Squad(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    qualification = db.Column(db.String(100), default='San') # e.g., San, RS, NFS, NA
+    current_status = db.Column(db.String(10), default='2') # 2, 3, 4, 7, 8, Pause, Pos, NEB
+    last_status_change = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    missions = db.relationship('Mission', secondary=mission_squad, back_populates='squads')
+    
+    def to_dict(self):
+        # Find active mission for this squad
+        active_mission = None
+        for m in self.missions:
+            if m.status != 'Abgeschlossen':
+                active_mission = {
+                    'id': m.id,
+                    'mission_number': m.mission_number,
+                    'location': m.location
+                }
+                break
+
+        return {
+            'id': self.id,
+            'name': self.name,
+            'qualification': self.qualification,
+            'current_status': self.current_status,
+            'last_status_change': (self.last_status_change.isoformat() + 'Z') if self.last_status_change else None,
+            'active_mission': active_mission
+        }
+
+class Mission(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    mission_number = db.Column(db.String(50), nullable=True) # Manual Entry
+    location = db.Column(db.String(200), nullable=False)
+    alarming_entity = db.Column(db.String(200), nullable=True)
+    reason = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), default='Laufend') # Laufend, Abgeschlossen
+    outcome = db.Column(db.String(50), nullable=True) # Inter Unter, Belassen, ARM, PVW
+    notes = db.Column(db.Text, default='')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    squads = db.relationship('Squad', secondary=mission_squad, back_populates='missions')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'mission_number': self.mission_number,
+            'location': self.location,
+            'alarming_entity': self.alarming_entity,
+            'squads': [{'name': s.name, 'id': s.id, 'status': s.current_status} for s in self.squads],
+            'squad_ids': [s.id for s in self.squads],
+            'reason': self.reason,
+            'description': self.description,
+            'status': self.status,
+            'outcome': self.outcome,
+            'notes': self.notes,
+            'created_at': (self.created_at.isoformat() + 'Z') if self.created_at else None
+        }
+
+class LogEntry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    action = db.Column(db.String(50)) # MISSION_CREATE, MISSION_UPDATE, STATUS_CHANGE, CONFIG
+    details = db.Column(db.String(500))
+    mission_id = db.Column(db.Integer, db.ForeignKey('mission.id'), nullable=True)
+    squad_id = db.Column(db.Integer, db.ForeignKey('squad.id'), nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'timestamp': self.timestamp.isoformat(),
+            'action': self.action,
+            'details': self.details,
+            'mission_id': self.mission_id,
+            'squad_id': self.squad_id
+        }
+
+class PredefinedOption(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    category = db.Column(db.String(50)) # location, entity, reason
+    value = db.Column(db.String(200))
+
+# --- Helper Functions ---
+
+STATUS_MAP = {
+    '2': 'EB',
+    '3': 'zBO',
+    '4': 'BO',
+    '7': 'zAO',
+    '8': 'AO',
+    'Pause': 'Pause',
+    'NEB': 'NEB',
+    '1': 'Frei'
+}
+
+def log_action(action, details, mission_id=None, squad_id=None):
+    entry = LogEntry(action=action, details=details, mission_id=mission_id, squad_id=squad_id)
+    db.session.add(entry)
+    db.session.commit()
+
+# --- Routes ---
+
+@app.route('/')
+def index():
+    # Use current timestamp to force reload of static assets during development
+    return render_template('index.html', last_updated=datetime.now().timestamp())
+
+@app.route('/api/init', methods=['GET'])
+def get_init_data():
+    config = ShiftConfig.query.filter_by(is_active=True).first()
+    squads = Squad.query.all()
+    # Sort missions: Laufend first (active desc), then Abgeschlossen (desc)
+    missions_active = Mission.query.filter(Mission.status != 'Abgeschlossen').order_by(Mission.created_at.desc()).all()
+    missions_done = Mission.query.filter_by(status='Abgeschlossen').order_by(Mission.created_at.desc()).all()
+    missions = missions_active + missions_done
+    
+    options = PredefinedOption.query.all()
+    opts_dict = {'location': [], 'entity': [], 'reason': []}
+    for o in options:
+        if o.category in opts_dict:
+            opts_dict[o.category].append(o.value)
+    
+    return jsonify({
+        'config': config.to_dict() if config else None,
+        'squads': [s.to_dict() for s in squads],
+        'missions': [m.to_dict() for m in missions],
+        'options': opts_dict
+    })
+
+@app.route('/api/config', methods=['POST'])
+def save_config():
+    data = request.json
+    # Deactivate old configs
+    ShiftConfig.query.update({ShiftConfig.is_active: False})
+    
+    # Create new config
+    start_dt = datetime.utcnow()
+    # If user provided start_time (optional in creation, usually now)
+    if 'start_time' in data and data['start_time']:
+        try:
+            start_dt = datetime.fromisoformat(data['start_time'])
+        except:
+            pass
+
+    new_config = ShiftConfig(
+        location=data.get('location', ''),
+        address=data.get('address', ''),
+        start_time=start_dt
+    )
+    db.session.add(new_config)
+    
+    # Handle pre-defined options if provided
+    if 'options' in data:
+        PredefinedOption.query.delete() 
+        for cat, values in data['options'].items():
+            for val in values:
+                db.session.add(PredefinedOption(category=cat, value=val))
+    else:
+        # Load default options from file if it exists
+        PredefinedOption.query.delete()
+        default_file = 'default_options.txt'
+        if os.path.exists(default_file):
+            try:
+                with open(default_file, 'r', encoding='utf-8') as f:
+                    current_category = None
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#'):  # Skip empty lines and comments
+                            continue
+                        
+                        # Check if this is a category header
+                        if line.startswith('[') and line.endswith(']'):
+                            current_category = line[1:-1].lower()
+                        elif current_category in ['location', 'entity', 'reason']:
+                            db.session.add(PredefinedOption(category=current_category, value=line))
+            except Exception as e:
+                print(f"Error loading default options: {e}")
+    
+    # Initial Squads - Only create if requested (Standard Setup)
+    if 'squads' in data:
+        Squad.query.delete()
+        Mission.query.delete()
+        LogEntry.query.delete()
+        db.session.execute(mission_squad.delete())
+        
+        for s in data['squads']:
+            new_squad = Squad(name=s['name'], qualification=s.get('qualification', 'San'))
+            db.session.add(new_squad)
+
+    db.session.commit()
+    log_action('KONFIGURATION', f"Dienst gestartet am Ort: {new_config.location}")
+    return jsonify(new_config.to_dict())
+
+@app.route('/api/config', methods=['PUT'])
+def update_config():
+    config = ShiftConfig.query.filter_by(is_active=True).first()
+    if not config:
+        return jsonify({'error': 'No active shift'}), 404
+    
+    data = request.json
+    changes = []
+    
+    if 'location' in data and data['location'] != config.location:
+        config.location = data['location']
+        changes.append("Einsatzort aktualisiert")
+    
+    if 'address' in data and data['address'] != config.address:
+        config.address = data['address']
+        changes.append("Adresse aktualisiert")
+
+    if 'start_time' in data and data['start_time']:
+        try:
+            # Assume ISO format from frontend datetime-local or similar
+            # If string is '2025-12-11T12:00', fromisoformat works
+            new_start = datetime.fromisoformat(data['start_time'])
+            if new_start != config.start_time:
+                config.start_time = new_start
+                changes.append("Dienstbeginn geändert")
+        except ValueError:
+            pass
+            
+    if 'end_time' in data:
+        try:
+            if data['end_time']:
+                new_end = datetime.fromisoformat(data['end_time'])
+                config.end_time = new_end
+            else:
+                config.end_time = None
+            changes.append("Dienstende geändert")
+        except ValueError:
+            pass
+            
+    if changes:
+        db.session.commit()
+        log_action('KONFIGURATION', f"Einstellungen geändert: {', '.join(changes)}")
+    
+    # Handle locations import
+    if 'locations' in data and data['locations']:
+        # Add new locations to existing ones (don't delete existing)
+        existing_locs = {opt.value for opt in PredefinedOption.query.filter_by(category='location').all()}
+        new_count = 0
+        for loc in data['locations']:
+            if loc and loc not in existing_locs:
+                db.session.add(PredefinedOption(category='location', value=loc))
+                new_count += 1
+        
+        if new_count > 0:
+            db.session.commit()
+            log_action('KONFIGURATION', f"{new_count} neue Einsatzorte hinzugefügt")
+    
+    return jsonify(config.to_dict())
+
+
+
+@app.route('/api/squads', methods=['POST'])
+def create_squad():
+    data = request.json
+    if Squad.query.filter_by(name=data['name']).first():
+        return jsonify({'error': 'Squad exists'}), 400
+    
+    squad = Squad(name=data['name'], qualification=data.get('qualification', 'San'))
+    db.session.add(squad)
+    db.session.commit()
+    log_action('TRUPP NEU', f"{squad.name} ({squad.qualification})", squad_id=squad.id)
+    return jsonify(squad.to_dict()), 201
+
+@app.route('/api/squads/<int:id>', methods=['PUT'])
+def update_squad(id):
+    squad = Squad.query.get_or_404(id)
+    data = request.json
+    
+    changes = []
+    if 'name' in data and data['name'] != squad.name:
+        changes.append(f"Name: {squad.name} -> {data['name']}")
+        squad.name = data['name']
+        
+    if 'qualification' in data and data['qualification'] != squad.qualification:
+        changes.append(f"Qual: {squad.qualification} -> {data['qualification']}")
+        squad.qualification = data.get('qualification')
+
+    if changes:
+        db.session.commit()
+        log_action('TRUPP UPDATE', f"{squad.name} bearbeitet: {', '.join(changes)}", squad_id=squad.id)
+        
+    return jsonify(squad.to_dict())
+
+@app.route('/api/squads/<int:id>', methods=['DELETE'])
+def delete_squad(id):
+    squad = Squad.query.get_or_404(id)
+    name = squad.name
+    
+    # Check if used in active missions? 
+    # User might want to force delete. Let's just log it.
+    # But database FK constraints might be an issue if we don't cascade.
+    # The LogEntry has nullable squad_id, MissionSquad triggers cascade?
+    # Helper for cleanliness: Remove associations first if needed.
+    
+    # Delete association rows manually if not cascaded by model (default is usually no cascade for many-to-many unless specified)
+    db.session.execute(mission_squad.delete().where(mission_squad.c.squad_id == id))
+    
+    db.session.delete(squad)
+    db.session.commit()
+    
+    log_action('TRUPP GELÖSCHT', f"{name}")
+    return jsonify({'status': 'deleted'})
+
+@app.route('/api/squads/<int:id>/status', methods=['POST'])
+def update_squad_status(id):
+    squad = Squad.query.get_or_404(id)
+    data = request.json
+    new_status = data.get('status')
+    
+    if new_status and new_status != squad.current_status:
+        old_status = squad.current_status
+        squad.current_status = new_status
+        squad.last_status_change = datetime.utcnow()
+        db.session.commit()
+        
+        # Log logic: if squad is in an active mission, allow logging that linkage
+        # But a squad can be in multiple missions? Usually one active mission.
+        active_mission_id = None
+        for m in squad.missions:
+            if m.status != 'Abgeschlossen':
+                active_mission_id = m.id
+                break
+        
+        old_label = STATUS_MAP.get(old_status, old_status)
+        new_label = STATUS_MAP.get(new_status, new_status)
+        log_action('STATUS', f"{squad.name}: {old_label} -> {new_label}", 
+                   squad_id=squad.id, mission_id=active_mission_id)
+        return jsonify(squad.to_dict())
+    
+    return jsonify(squad.to_dict())
+
+@app.route('/api/missions', methods=['POST'])
+def create_mission():
+    data = request.json
+    required = ['location', 'reason'] # Description not required anymore
+    if not all(k in data for k in required):
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    new_mission = Mission(
+        mission_number=data.get('mission_number'),
+        location=data['location'],
+        alarming_entity=data.get('alarming_entity'),
+        reason=data['reason'],
+        description=data.get('description', ''),
+        notes=data.get('notes', '')
+    )
+    
+    # Handle Squads
+    if 'squad_ids' in data:
+        for sid in data['squad_ids']:
+            squad = Squad.query.get(sid)
+            if squad:
+                new_mission.squads.append(squad)
+    
+    db.session.add(new_mission)
+    db.session.commit()
+
+    log_action('EINSATZ NEU', f"Neuer Einsatz: {new_mission.reason} in {new_mission.location}", mission_id=new_mission.id)
+    return jsonify(new_mission.to_dict()), 201
+
+@app.route('/api/missions/<int:id>', methods=['PUT'])
+def update_mission(id):
+    mission = Mission.query.get_or_404(id)
+    data = request.json
+    
+    changes = []
+    
+    if 'status' in data and data['status'] != mission.status:
+        changes.append(f"Status: {mission.status} -> {data['status']}")
+        mission.status = data['status']
+    
+    if 'outcome' in data and data['outcome'] != mission.outcome:
+        mission.outcome = data['outcome']
+        if mission.status == 'Abgeschlossen' and mission.outcome:
+            changes.append(f"Ausgang: {mission.outcome}")
+    
+    if 'squad_ids' in data:
+        # Update roster
+        current_ids = {s.id for s in mission.squads}
+        new_ids = set(data['squad_ids'])
+        if current_ids != new_ids:
+            changes.append("Trupps aktualisiert")
+            mission.squads = []
+            for sid in new_ids:
+                s = Squad.query.get(sid)
+                if s: 
+                    mission.squads.append(s)
+
+    # Handle description separately to include content in log
+    if 'description' in data and mission.description != data['description']:
+        mission.description = data['description']
+        desc_text = mission.description if mission.description else "(leer)"
+        changes.append(f"Lagebeschreibung: {desc_text}")
+
+    # Handle other fields
+    fields = ['location', 'reason', 'mission_number', 'alarming_entity']
+    for f in fields:
+        if f in data and getattr(mission, f) != data[f]:
+            changes.append(f"{f.capitalize()} geändert")
+            setattr(mission, f, data[f])
+            
+    if 'notes' in data and mission.notes != data['notes']:
+        mission.notes = data['notes']
+        # Limit length if very long? 
+        changes.append(f"Notiz: {mission.notes}")
+
+    if changes:
+        db.session.commit()
+        log_action('EINSATZ UPDATE', ", ".join(changes), mission_id=mission.id)
+
+    return jsonify(mission.to_dict())
+
+@app.route('/api/changes', methods=['GET'])
+def get_changes():
+    logs = LogEntry.query.order_by(LogEntry.timestamp.desc()).all()
+    return jsonify([l.to_dict() for l in logs])
+
+# --- Helper Functions --- (Appending to previous helper section logically, but placing here for context)
+
+def generate_export_file(config):
+    output = io.StringIO()
+    
+    # Header
+    output.write("=== EINSATZPROTOKOLL ===\n")
+    if config:
+        output.write(f"Dienst: {config.location}\n")
+        if config.address:
+            output.write(f"Adresse: {config.address}\n")
+        
+        # Format times nicely
+        s_str = config.start_time.strftime('%d.%m.%Y %H:%M') if config.start_time else '?'
+        e_str = config.end_time.strftime('%d.%m.%Y %H:%M') if config.end_time else 'Laufend'
+        
+        output.write(f"Zeitraum: {s_str} - {e_str}\n")
+    output.write("\n")
+    
+    # Missions
+    missions = Mission.query.order_by(Mission.created_at).all()
+    output.write(f"=== EINSÄTZE ({len(missions)}) ===\n\n")
+    
+    for m in missions:
+        output.write(f"Einsatz #{m.mission_number or m.id}\n")
+        
+        # Show start time and end time (if completed)
+        start_time = m.created_at.strftime('%d.%m.%Y %H:%M:%S') if m.created_at else '?'
+        if m.status == 'Abgeschlossen':
+            # Find the completion time from logs
+            completion_log = LogEntry.query.filter_by(mission_id=m.id, action='EINSATZ UPDATE').filter(
+                LogEntry.details.like('%Status: Laufend -> Abgeschlossen%')
+            ).order_by(LogEntry.timestamp.desc()).first()
+            
+            if completion_log:
+                end_time = completion_log.timestamp.strftime('%d.%m.%Y %H:%M:%S')
+            else:
+                end_time = 'Abgeschlossen'
+            output.write(f"Zeit: {start_time} - {end_time}\n")
+        else:
+            output.write(f"Zeit: {start_time} - Laufend\n")
+        
+        output.write(f"Ort: {m.location}\n")
+        output.write(f"Grund: {m.reason}\n")
+        output.write(f"Alarmierung: {m.alarming_entity}\n")
+        output.write(f"Beteiligte Trupps: {', '.join([s.name for s in m.squads])}\n")
+        if m.description:
+            output.write(f"Lage: {m.description}\n")
+        if m.notes:
+            output.write(f"Notizen: {m.notes}\n")
+        
+        # Chronology of this mission
+        m_logs = LogEntry.query.filter_by(mission_id=m.id).order_by(LogEntry.timestamp).all()
+        if m_logs:
+            output.write("  Verlauf:\n")
+            for l in m_logs:
+                output.write(f"  - [{l.timestamp.strftime('%H:%M:%S')}] {l.action}: {l.details}\n")
+        
+        output.write("-" * 40 + "\n\n")
+
+    # Squad Activity / Pause Analysis
+    output.write("=== TRUPP AKTIVITÄT ===\n\n")
+    squads = Squad.query.all()
+    for s in squads:
+        # Count missions for this squad
+        mission_count = len([m for m in s.missions])
+        
+        output.write(f"Trupp: {s.name} ({s.qualification}) - {mission_count} Einsätze\n")
+        s_logs = LogEntry.query.filter_by(squad_id=s.id).order_by(LogEntry.timestamp).all()
+        
+        # Track pause periods (start and end times)
+        pause_periods = []
+        pause_start = None
+        
+        for l in s_logs:
+            if l.action == 'STATUS':
+                # Add mission context if available
+                mission_context = ""
+                if l.mission_id:
+                    mission = Mission.query.get(l.mission_id)
+                    if mission:
+                        mission_num = mission.mission_number or mission.id
+                        mission_context = f" (Einsatz #{mission_num})"
+                
+                output.write(f"  [{l.timestamp.strftime('%H:%M:%S')}] {l.details}{mission_context}\n")
+                
+                # Check if status changed to Pause
+                if '-> Pause' in l.details:
+                    pause_start = l.timestamp
+                # Check if status changed from Pause to something else
+                elif pause_start and 'Pause ->' in l.details:
+                    pause_end = l.timestamp
+                    pause_periods.append(f"{pause_start.strftime('%H:%M:%S')} - {pause_end.strftime('%H:%M:%S')}")
+                    pause_start = None
+        
+        # If pause is still ongoing (no end time)
+        if pause_start:
+            pause_periods.append(f"{pause_start.strftime('%H:%M:%S')} - laufend")
+        
+        # Summary of pauses
+        if pause_periods:
+            output.write(f"  Pausen: {'; '.join(pause_periods)}\n")
+        output.write("\n")
+    
+    # Full Log
+    output.write("=== GESAMTES LOGBUCH ===\n")
+    all_logs = LogEntry.query.order_by(LogEntry.timestamp).all()
+    for l in all_logs:
+        output.write(f"[{l.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] [{l.action}] {l.details}\n")
+
+    # Convert to bytes
+    mem = io.BytesIO()
+    mem.write(output.getvalue().encode('utf-8'))
+    mem.seek(0)
+    
+    return mem
+
+@app.route('/api/export', methods=['GET'])
+def export_data():
+    config = ShiftConfig.query.filter_by(is_active=True).first()
+    # Check if there is no active config, maybe get the last one?
+    # For manual export button, usually we want current.
+    # If no active config, maybe try to find the last created one.
+    if not config:
+        config = ShiftConfig.query.order_by(ShiftConfig.id.desc()).first()
+        
+    mem = generate_export_file(config)
+    filename = f"protokoll_{datetime.now().strftime('%Y%m%d_%H%M')}.txt"
+    return send_file(mem, as_attachment=True, download_name=filename, mimetype='text/plain')
+
+@app.route('/api/config/end', methods=['POST'])
+def end_shift():
+    config = ShiftConfig.query.filter_by(is_active=True).first()
+    if config:
+        config.is_active = False
+        config.end_time = datetime.utcnow()
+        db.session.commit()
+        log_action('KONFIGURATION', f"Dienst beendet: {config.location}")
+        
+    # Reset predefined options to default values
+    PredefinedOption.query.delete()
+    
+    # Load default options from file if it exists
+    default_file = 'default_options.txt'
+    if os.path.exists(default_file):
+        try:
+            with open(default_file, 'r', encoding='utf-8') as f:
+                current_category = None
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):  # Skip empty lines and comments
+                        continue
+                    
+                    # Check if this is a category header
+                    if line.startswith('[') and line.endswith(']'):
+                        current_category = line[1:-1].lower()
+                    elif current_category in ['location', 'entity', 'reason']:
+                        db.session.add(PredefinedOption(category=current_category, value=line))
+        except Exception as e:
+            print(f"Error loading default options: {e}")
+    
+    db.session.commit()
+        
+    # Generate export (even if config was None/already ended, try to get last)
+    # Re-fetch or reuse config object (which is now inactive).
+    if not config:
+         config = ShiftConfig.query.order_by(ShiftConfig.id.desc()).first()
+         
+    mem = generate_export_file(config)
+    filename = f"abschluss_{datetime.now().strftime('%Y%m%d_%H%M')}.txt"
+    return send_file(mem, as_attachment=True, download_name=filename, mimetype='text/plain')
+
+if __name__ == '__main__':
+    with app.app_context():
+        # Auto-create DB if not exists, but we rely on a manual reset or Init API for clean slate usually
+        db.create_all()
+    app.run(debug=True, port=5001)

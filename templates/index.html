@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Einsatzleitung</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ last_updated }}">
+</head>
+
+<body>
+    <!-- Welcome Screen (shown when no active shift) -->
+    <div id="welcome-screen" class="welcome-screen">
+        <div class="welcome-left">
+            <div class="welcome-content">
+                <h1>Johanniter Mission Control</h1>
+                <p class="welcome-subtitle">Einsatzleitung & Protokollierung</p>
+
+                <div class="welcome-actions">
+                    <button class="btn-welcome-primary" onclick="openShiftSetup()">
+                        <span class="btn-icon">➕</span>
+                        Neuer Dienst
+                    </button>
+                    <button class="btn-welcome-secondary" onclick="openTutorial()">
+                        <span class="btn-icon">📖</span>
+                        Tutorial
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="welcome-right">
+            <img src="/static/welcome-image.jpg" alt="Johanniter" class="welcome-image">
+        </div>
+    </div>
+
+    <!-- Shift Setup Modal (opened from welcome screen) -->
+    <div id="shift-setup-modal" class="modal">
+        <div class="modal-content">
+            <h2>Dienst konfigurieren</h2>
+            <form id="shift-setup-form" onsubmit="startShift(event)">
+                <div class="form-group">
+                    <label>Name des Dienstes / Einsatzort (Optional)</label>
+                    <input type="text" id="conf-location" placeholder="z.B. Stadtfest">
+                </div>
+                <div class="form-group">
+                    <label>Adresse (Optional)</label>
+                    <input type="text" id="conf-address" placeholder="Musterstraße 1">
+                </div>
+                <div class="form-group">
+                    <label>Dienstbeginn (Optional)</label>
+                    <input type="datetime-local" id="conf-start">
+                    <small>Leer lassen für "Jetzt"</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Initiale Trupps (Kommagetrennt)</label>
+                    <input type="text" id="conf-squads" placeholder="Trupp 1, Trupp 2, NEF"
+                        value="Trupp 1, Trupp 2, Trupp 3, NEF, RTW">
+                </div>
+
+                <div class="form-group">
+                    <label>Standard Einsatzorte (Kommagetrennt)</label>
+                    <input type="text" id="conf-locs" value="Hauptplatz, Bahnhof, San-Zelt">
+                </div>
+
+                <div style="text-align: right;">
+                    <button type="button" class="btn-secondary"
+                        onclick="closeModal('shift-setup-modal')">Abbrechen</button>
+                    <button type="submit" class="btn-primary">Dienst starten</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tutorial Modal -->
+    <div id="tutorial-modal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2>Tutorial - Mission Control</h2>
+                <button class="close-btn" onclick="closeModal('tutorial-modal')">&times;</button>
+            </div>
+            <div class="tutorial-content">
+                <h3>Willkommen bei Johanniter Mission Control</h3>
+                <p>Diese Anwendung hilft Ihnen bei der Einsatzleitung und Protokollierung.</p>
+
+                <h4>Hauptfunktionen:</h4>
+                <ul>
+                    <li><strong>Dienst starten:</strong> Konfigurieren Sie einen neuen Dienst mit Trupps und
+                        Einsatzorten</li>
+                    <li><strong>Trupps verwalten:</strong> Erstellen und bearbeiten Sie Trupps, ändern Sie deren Status
+                    </li>
+                    <li><strong>Einsätze dokumentieren:</strong> Erfassen Sie Einsätze mit allen Details</li>
+                    <li><strong>Protokoll:</strong> Alle Änderungen werden automatisch protokolliert</li>
+                    <li><strong>Export:</strong> Exportieren Sie das Protokoll als Textdatei</li>
+                </ul>
+
+                <h4>Status-Codes:</h4>
+                <ul>
+                    <li><strong>EB</strong> - Einsatzbereit</li>
+                    <li><strong>zBO</strong> - Zum Berufungsort</li>
+                    <li><strong>BO</strong> - Am Berufungsort</li>
+                    <li><strong>zAO</strong> - Zum Abgabeort</li>
+                    <li><strong>AO</strong> - Am Abgabeort</li>
+                    <li><strong>Pause</strong> - Pause</li>
+                    <li><strong>NEB</strong> - Nicht Einsatzbereit</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <header>
+        <div class="header-left">
+            <h1>Einsatzleitung</h1>
+            <span id="shift-location" class="subtitle"></span>
+            <button class="icon-btn" onclick="openConfigModal()" title="Dienst bearbeiten">⚙️</button>
+        </div>
+
+        <div class="header-center">
+            <div id="clock" class="clock">--:--:--</div>
+            <div id="date" class="date">--.--.----</div>
+        </div>
+
+        <div class="header-actions">
+            <button onclick="openLogModal()">Protokoll</button>
+            <button onclick="openNewMissionModal()">+ Neuer Einsatz</button>
+            <button onclick="window.location.href='/api/export'">Exportieren</button>
+            <button onclick="endShift()" class="btn-danger">Dienst beenden</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Squad Panel -->
+        <section class="squad-panel">
+            <div class="panel-header">
+                <span>Trupp-Übersicht</span>
+                <button class="small-btn" onclick="openSquadModal()">+</button>
+            </div>
+            <div id="squad-list" class="squad-list">
+                <!-- Squads loaded here -->
+            </div>
+        </section>
+
+        <!-- Mission Panel -->
+        <section class="mission-panel">
+            <div class="panel-header" id="mission-panel-header">
+                <span>Einsatztagebuch <span id="mission-stats"
+                        style="font-size:0.9rem; margin-left:1rem; font-weight:normal; opacity:0.8;"></span></span>
+            </div>
+            <div id="mission-list" class="mission-list">
+                <!-- Missions loaded here -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Logs / Ticker Bar -->
+    <footer id="ticker-bar">
+        Letzte Änderung: <span id="last-log">...</span>
+    </footer>
+
+    <!-- New Mission Modal -->
+    <div id="new-mission-modal" class="modal">
+        <div class="modal-content">
+            <h2>Neuer Einsatz</h2>
+            <form id="new-mission-form" onsubmit="submitMission(event)">
+                <input type="hidden" id="edit-mission-id">
+
+                <div class="row">
+                    <div class="form-group half">
+                        <label>Einsatznummer (Optional)</label>
+                        <input type="text" id="m-number">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Einsatzort</label>
+                    <input type="text" id="m-location" list="list-location" required>
+                    <datalist id="list-location"></datalist>
+                </div>
+
+                <div class="form-group">
+                    <label>Alarmierende Stelle</label>
+                    <input type="text" id="m-entity" list="list-entity">
+                    <datalist id="list-entity"></datalist>
+                </div>
+
+                <div class="form-group">
+                    <label>Zugeordnete Trupps</label>
+                    <div id="m-squad-select" class="checkbox-group">
+                        <!-- Checkboxes injected by JS -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Berufungsgrund</label>
+                    <input type="text" id="m-reason" list="list-reason" required>
+                    <datalist id="list-reason"></datalist>
+                </div>
+
+                <div class="form-group">
+                    <label>Lagebeschreibung (Optional)</label>
+                    <textarea id="m-desc" rows="2"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Anmerkungen</label>
+                    <textarea id="m-notes" rows="2"></textarea>
+                </div>
+
+                <div class="form-group" id="outcome-group" style="display:none;">
+                    <label>Ausgang des Einsatzes <span style="color:red;">*</span></label>
+                    <select id="m-outcome">
+                        <option value="">-- Bitte wählen --</option>
+                        <option value="Inter Unter">Inter Unter (Intervention Unterblieben)</option>
+                        <option value="Belassen">Belassen (Vor Ort belassen)</option>
+                        <option value="ARM">ARM (Anderes Rettungsmittel)</option>
+                        <option value="PVW">PVW (Patient verweigert)</option>
+                    </select>
+                </div>
+
+                <div style="text-align: right;">
+                    <button type="button" class="btn-secondary"
+                        onclick="closeModal('new-mission-modal')">Abbrechen</button>
+                    <button type="submit" class="btn-primary">Speichern</button>
+                    <button type="button" class="btn-success" id="btn-complete-mission" onclick="completeMission()"
+                        style="display:none;">Abschließen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Squad Modal -->
+    <div id="squad-modal" class="modal">
+        <div class="modal-content small">
+            <h2 id="squad-modal-title">Neuer Trupp</h2>
+            <form id="s-form" onsubmit="submitSquad(event)">
+                <input type="hidden" id="s-id">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="s-name" required>
+                </div>
+                <div class="form-group">
+                    <label>Qualifikation</label>
+                    <input type="text" id="s-qual" placeholder="San, RS, NFS...">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" id="btn-delete-squad" class="btn-danger" onclick="deleteSquad()"
+                        style="display:none;">Löschen</button>
+                    <!-- Spacer for when Delete is hidden? No, space-between works well with 2 or 3 items if we want full spread. 
+                         But usually Cancel/Save should be close. 
+                         User asked for Symmetry.
+                         Let's try: Delete (Left), Cancel (Center), Save (Right) implies 3 columns.
+                         Or just space-between.
+                    -->
+                    <button type="button" class="btn-secondary" onclick="closeModal('squad-modal')">Abbrechen</button>
+                    <button type="submit" class="btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Log Viewer Modal -->
+    <div id="log-modal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2>Protokoll</h2>
+                <button class="close-btn" onclick="closeModal('log-modal')">&times;</button>
+            </div>
+            <div class="log-container">
+                <table id="log-table">
+                    <thead>
+                        <tr>
+                            <th>Zeit</th>
+                            <th>Aktion</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Logs here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Config Edit Modal -->
+    <div id="config-modal" class="modal">
+        <div class="modal-content">
+            <h2>Dienst bearbeiten</h2>
+            <form onsubmit="updateConfig(event)">
+                <div class="form-group">
+                    <label>Name des Dienstes / Einsatzort</label>
+                    <input type="text" id="edit-conf-location">
+                </div>
+                <div class="form-group">
+                    <label>Adresse</label>
+                    <input type="text" id="edit-conf-address">
+                </div>
+                <div class="row">
+                    <div class="form-group half">
+                        <label>Dienstbeginn</label>
+                        <input type="datetime-local" id="edit-conf-start">
+                    </div>
+                    <div class="form-group half">
+                        <label>Dienstende</label>
+                        <input type="datetime-local" id="edit-conf-end">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Einsatzorte importieren (Optional)</label>
+                    <input type="file" id="locations-file" accept=".txt">
+                    <small>Plain-Text-Datei mit einem Ort pro Zeile</small>
+                </div>
+
+                <div style="text-align: right;">
+                    <button type="button" class="btn-secondary" onclick="closeModal('config-modal')">Abbrechen</button>
+                    <button type="submit" class="btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}?v={{ last_updated }}"></script>
+</body>
+
+</html>

@@ -1,0 +1,17 @@
+# Standard-Optionen für Johanniter Mission Control
+# Format: [Kategorie] gefolgt von den Optionen (eine pro Zeile)
+# Kommentare beginnen mit #
+
+[location]
+
+
+[entity]
+Sicherheitsdienst
+Polizei
+Feuerwehr
+Veranstalter 
+
+[reason]
+Aktute Erkrankung
+Verletzung
+Sonstiges
