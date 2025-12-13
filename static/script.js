@@ -45,12 +45,16 @@ async function startShift(e) {
     const loc = document.getElementById('conf-location').value;
     const addr = document.getElementById('conf-address').value;
     const start = document.getElementById('conf-start').value;
-    const sqRaw = document.getElementById('conf-squads').value;
 
     // Default location if empty (optional)
     const finalLoc = loc.trim() || 'Dienst ' + new Date().toLocaleDateString();
 
-    const squads = sqRaw.split(',').map(s => s.trim()).filter(s => s).map(s => ({ name: s }));
+    // Collect squads from dynamic inputs
+    const squads = [];
+    document.querySelectorAll('.squad-input-item input').forEach((input, index) => {
+        const name = input.value.trim() || `Trupp ${index + 1}`;
+        squads.push({ name: name });
+    });
 
     try {
         await fetch('/api/config', {
@@ -71,12 +75,99 @@ async function startShift(e) {
     }
 }
 
+function updateSquadInputs() {
+    const count = parseInt(document.getElementById('conf-squad-count').value) || 0;
+    const container = document.getElementById('squad-inputs-container');
+
+    // Preserve existing values if expanding
+    const currentValues = Array.from(container.querySelectorAll('input')).map(i => i.value);
+
+    container.innerHTML = '';
+
+    for (let i = 0; i < count; i++) {
+        const div = document.createElement('div');
+        div.className = 'squad-input-item';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = `Trupp ${i + 1}`;
+        input.value = currentValues[i] || ''; // Restore or empty
+        div.appendChild(input);
+        container.appendChild(div);
+    }
+}
+
+function changeSquadCount(delta) {
+    const input = document.getElementById('conf-squad-count');
+    let val = parseInt(input.value) || 0;
+    val += delta;
+    if (val < 0) val = 0;
+    if (val > 20) val = 20;
+    input.value = val;
+    updateSquadInputs();
+}
+
 function openShiftSetup() {
     document.getElementById('shift-setup-modal').classList.add('open');
 }
 
+// --- Guide / Tour System ---
+// --- Tutorial System ---
+let currentTutorialStep = 0;
+const totalTutorialSteps = 4;
+
 function openTutorial() {
+    currentTutorialStep = 0;
+    updateTutorialUI();
     document.getElementById('tutorial-modal').classList.add('open');
+}
+
+function nextTutorialStep() {
+    if (currentTutorialStep < totalTutorialSteps - 1) {
+        currentTutorialStep++;
+        updateTutorialUI();
+    } else {
+        closeModal('tutorial-modal');
+    }
+}
+
+function prevTutorialStep() {
+    if (currentTutorialStep > 0) {
+        currentTutorialStep--;
+        updateTutorialUI();
+    }
+}
+
+function updateTutorialUI() {
+    // Show correct slide
+    document.querySelectorAll('.tutorial-slide').forEach((slide, index) => {
+        if (index === currentTutorialStep) {
+            slide.classList.add('active');
+        } else {
+            slide.classList.remove('active');
+        }
+    });
+
+    // Update dots
+    document.querySelectorAll('.dot').forEach((dot, index) => {
+        if (index === currentTutorialStep) {
+            dot.classList.add('active');
+        } else {
+            dot.classList.remove('active');
+        }
+    });
+
+    // Update buttons
+    document.getElementById('btn-tut-prev').disabled = currentTutorialStep === 0;
+    const nextBtn = document.getElementById('btn-tut-next');
+    if (currentTutorialStep === totalTutorialSteps - 1) {
+        nextBtn.textContent = 'Verstanden';
+        nextBtn.classList.add('btn-success');
+        nextBtn.classList.remove('btn-primary');
+    } else {
+        nextBtn.textContent = 'Weiter';
+        nextBtn.classList.add('btn-primary');
+        nextBtn.classList.remove('btn-success');
+    }
 }
 
 function openConfigModal() {
@@ -126,7 +217,7 @@ async function updateConfig(e) {
 }
 
 async function endShift() {
-    if (!confirm("Möchten Sie den Dienst wirklich beenden? Dies wird den aktuellen Status deaktivieren.")) return;
+    if (!confirm("Möchten Sie den Dienst wirklich beenden? Der aktuelle Status wird deaktiviert.")) return;
 
     try {
         const response = await fetch('/api/config/end', { method: 'POST' });
@@ -202,8 +293,22 @@ function renderSquads() {
         }
 
         if (squad.active_mission) {
-            locInfo = `Einsatz #${squad.active_mission.mission_number || squad.active_mission.id} (${squad.active_mission.location})`;
+            locInfo = `Einsatz #${squad.active_mission.mission_number || squad.active_mission.id} (${squad.active_mission.location}) - ${squad.active_mission.reason}`;
+
+            // Warning Check: Mission active but Status is 2 (EB), Pause, or NEB
+            const invalidStatuses = ['2', 'Pause', 'NEB'];
+            if (invalidStatuses.includes(squad.current_status)) {
+                locInfo += `<span class="status-warning-dot" title="Status prüfen!"></span>`;
+            }
         }
+
+        card.setAttribute('draggable', true);
+        card.dataset.id = squad.id;
+        card.addEventListener('dragstart', handleDragStart);
+        card.addEventListener('dragover', handleDragOver);
+        card.addEventListener('drop', handleDrop);
+        card.addEventListener('dragenter', handleDragEnter);
+        card.addEventListener('dragleave', handleDragLeave);
 
         card.innerHTML = `
             <div class="squad-info">
@@ -348,6 +453,12 @@ function renderMissions() {
         const card = document.createElement('div');
         card.className = `mission-card ${mission.status === 'Abgeschlossen' ? 'done' : ''}`;
 
+        // Enable Drop if active
+        if (mission.status !== 'Abgeschlossen') {
+            card.addEventListener('dragover', allowDrop);
+            card.addEventListener('drop', (e) => handleMissionDrop(e, mission));
+        }
+
         const date = new Date(mission.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         // Helper map for statuses (replicated from renderSquads or could be global)
@@ -359,7 +470,7 @@ function renderMissions() {
             '8': { label: 'AO', class: 's8' },
             'Pause': { label: 'Pause', class: 'sP' },
             'NEB': { label: 'NEB', class: 'sNEB' },
-            '1': { label: 'Frei', class: 's1' } // Fallback
+            '2': { label: 'EB', class: 's2' } // Fallback to EB if unknown
         };
 
         const squadsHtml = mission.squads.map(sq => {
@@ -368,7 +479,7 @@ function renderMissions() {
             if (mission.status === 'Abgeschlossen') {
                 return `<span class="squad-tag">${sq.name}</span>`;
             } else {
-                const st = statusMap[sq.status] || { label: sq.status, class: 's1' };
+                const st = statusMap[sq.status] || { label: 'EB', class: 's2' };
                 return `<span class="squad-tag">
                     ${sq.name} <span class="mini-status ${st.class}">${st.label}</span>
                 </span>`;
@@ -387,7 +498,22 @@ function renderMissions() {
                 <div><strong>Grund:</strong> ${mission.reason}</div>
                 <div class="full-width"><strong>Trupps:</strong> <div style="display:inline-flex; gap:0.5rem; flex-wrap:wrap;">${squadsHtml}</div></div>
                 ${mission.alarming_entity ? `<div><strong>Alarm:</strong> ${mission.alarming_entity}</div>` : ''}
-                ${mission.outcome ? `<div><strong>Ausgang:</strong> <span style="color: #4CAF50; font-weight: 600;">${mission.outcome}</span></div>` : ''}
+
+                ${(() => {
+                if (!mission.outcome) return '';
+                const outcomeMap = {
+                    'Intervention unterblieben': 'Int. Unt.',
+                    'Belassen': 'Belassen',
+                    'Belassen (vor Ort belassen)': 'Belassen',
+                    'ARM': 'ARM',
+                    'ARM (Anderes Rettungsmittel)': 'ARM',
+                    'PVW': 'PVW',
+                    'PVW (Patient verweigert)': 'PVW'
+                };
+                const abbr = outcomeMap[mission.outcome] || mission.outcome;
+                return `<div><strong>Ausgang:</strong> <span style="color: #4CAF50; font-weight: 600;">${abbr}</span></div>`;
+            })()}
+            </div>
             </div>
             ${mission.description ? `<div class="mission-desc">${mission.description}</div>` : ''}
             ${mission.notes ? `<div class="mission-notes">Note: ${mission.notes}</div>` : ''}
@@ -399,11 +525,18 @@ function renderMissions() {
 function openNewMissionModal() {
     document.getElementById('new-mission-form').reset();
     document.getElementById('edit-mission-id').value = '';
+    document.getElementById('mission-modal-title').innerText = "Neuer Einsatz"; // Set Title for New
+
 
     // Populate Checkboxes
     // Populate Checkboxes - Horizontal Layout with Badges
     const container = document.getElementById('m-squad-select');
     container.innerHTML = '';
+
+    // Reset buttons visibility
+    document.getElementById('btn-delete-mission').style.display = 'none';
+    document.getElementById('btn-complete-mission').style.display = 'none';
+    document.getElementById('outcome-group').style.display = 'none';
 
     // Inline Flex container style
     container.style.display = 'flex';
@@ -445,6 +578,8 @@ function toggleSquadSelection(button) {
 function editMission(mission) {
     document.getElementById('new-mission-form').reset();
     document.getElementById('edit-mission-id').value = mission.id;
+    document.getElementById('mission-modal-title').innerText = "Einsatz bearbeiten"; // Set Title for Edit
+
 
     document.getElementById('m-number').value = mission.mission_number || '';
     document.getElementById('m-location').value = mission.location;
@@ -507,6 +642,9 @@ function editMission(mission) {
         completeBtn.style.display = 'none';
     }
 
+    // Show Delete button for editing
+    document.getElementById('btn-delete-mission').style.display = 'inline-block';
+
     // Add Status Dropdown if Edit
     // (Simplification: User asks to edit mission. We can reuse form but what about Status? 
     // Usually status is handled via "Finish" button but user says "Edit Mission". 
@@ -550,41 +688,54 @@ async function submitMission(e) {
         squad_ids: squadIds
     };
 
-    if (id) {
-        // Edit
-        const statusEl = document.getElementById('m-status');
-        if (statusEl) payload.status = statusEl.value;
+    try {
+        let response;
+        if (id) {
+            // Edit
+            const statusEl = document.getElementById('m-status');
+            if (statusEl) payload.status = statusEl.value;
 
-        // Include outcome if provided
-        const outcomeEl = document.getElementById('m-outcome');
-        if (outcomeEl && outcomeEl.value) {
-            payload.outcome = outcomeEl.value;
+            // Include outcome if provided
+            const outcomeEl = document.getElementById('m-outcome');
+            if (outcomeEl && outcomeEl.value) {
+                payload.outcome = outcomeEl.value;
+            }
+
+            response = await fetch(`/api/missions/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } else {
+            // Create
+            response = await fetch('/api/missions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
         }
 
-        await fetch(`/api/missions/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-    } else {
-        // Create
-        await fetch('/api/missions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error || 'Serverfehler beim Speichern');
+        }
+
+        // Only close and reload if successful
+        // Remove status selector if added
+        const statusDiv = document.getElementById('edit-status-group');
+        if (statusDiv) statusDiv.remove();
+
+        // Hide outcome group
+        document.getElementById('outcome-group').style.display = 'none';
+        document.getElementById('btn-complete-mission').style.display = 'none';
+
+        closeModal('new-mission-modal');
+        loadData();
+
+    } catch (error) {
+        console.error('Error submitting mission:', error);
+        alert('Fehler beim Speichern: ' + error.message);
     }
-
-    // Remove status selector if added
-    const statusDiv = document.getElementById('edit-status-group');
-    if (statusDiv) statusDiv.remove();
-
-    // Hide outcome group
-    document.getElementById('outcome-group').style.display = 'none';
-    document.getElementById('btn-complete-mission').style.display = 'none';
-
-    closeModal('new-mission-modal');
-    loadData();
 }
 
 async function completeMission() {
@@ -628,9 +779,45 @@ async function completeMission() {
     document.getElementById('outcome-group').style.display = 'none';
     document.getElementById('btn-complete-mission').style.display = 'none';
 
+    // Hide outcome group
+    document.getElementById('outcome-group').style.display = 'none';
+    document.getElementById('btn-complete-mission').style.display = 'none';
+
     closeModal('new-mission-modal');
     loadData();
 }
+
+
+function openDeleteMissionModal() {
+    document.getElementById('delete-mission-reason').value = '';
+    document.getElementById('delete-mission-modal').classList.add('open');
+}
+
+async function confirmDeleteMission() {
+    const id = document.getElementById('edit-mission-id').value;
+    const reason = document.getElementById('delete-mission-reason').value;
+
+    if (!reason.trim()) {
+        alert("Bitte geben Sie eine Begründung an.");
+        return;
+    }
+
+    try {
+        await fetch(`/api/missions/${id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: reason })
+        });
+
+        closeModal('delete-mission-modal');
+        closeModal('new-mission-modal');
+        loadData();
+    } catch (e) {
+        console.error("Delete failed:", e);
+        alert("Fehler beim Löschen.");
+    }
+}
+
 
 
 // --- Logs ---
@@ -685,5 +872,206 @@ function closeModal(id) {
     if (id === 'new-mission-modal') {
         const statusDiv = document.getElementById('edit-status-group');
         if (statusDiv) statusDiv.remove();
+    }
+}
+
+// Weather Functionality
+async function initWeather() {
+    // 1. Try Geolocation
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => startWeatherUpdates(pos.coords.latitude, pos.coords.longitude),
+            (err) => {
+                console.warn("Weather location denied, falling back to IP:", err);
+                useIpLocation();
+            },
+            { timeout: 5000 } // Don't wait forever
+        );
+    } else {
+        useIpLocation();
+    }
+}
+
+async function useIpLocation() {
+    try {
+        // Fallback: Use IP-based location (e.g., ip-api.com is free for non-commercial)
+        // Or default to Berlin/Germany as generic fallback
+        const res = await fetch('https://ipapi.co/json/');
+        const data = await res.json();
+        if (data.latitude && data.longitude) {
+            startWeatherUpdates(data.latitude, data.longitude);
+        } else {
+            console.warn("IP location failed, defaulting to Berlin");
+            startWeatherUpdates(52.52, 13.405);
+        }
+    } catch (e) {
+        console.error("IP fallback failed:", e);
+        startWeatherUpdates(52.52, 13.405); // Final Fallback
+    }
+}
+
+function startWeatherUpdates(lat, lon) {
+    fetchWeather(lat, lon);
+    setInterval(() => fetchWeather(lat, lon), 30 * 60 * 1000);
+}
+
+async function fetchWeather(lat, lon) {
+    try {
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+        const data = await res.json();
+        const weather = data.current_weather;
+        updateWeatherUI(weather.temperature, weather.weathercode);
+    } catch (e) {
+        console.error("Weather fetch failed:", e);
+    }
+}
+
+function updateWeatherUI(temp, code) {
+    const widget = document.getElementById('weather-widget');
+    const iconEl = document.getElementById('weather-icon');
+    const tempEl = document.getElementById('weather-temp');
+
+    // WMO Weather Code Mapping
+    let icon = '☀️';
+    if (code >= 1 && code <= 3) icon = '⛅';
+    else if (code >= 45 && code <= 48) icon = '🌫️';
+    else if (code >= 51 && code <= 55) icon = '🌦️';
+    else if (code >= 61 && code <= 67) icon = '🌧️';
+    else if (code >= 71 && code <= 77) icon = '🌨️';
+    else if (code >= 80 && code <= 82) icon = '🌧️';
+    else if (code >= 95 && code <= 99) icon = '⛈️';
+
+    iconEl.textContent = icon;
+    tempEl.textContent = `${Math.round(temp)}°C`;
+    widget.classList.remove('hidden');
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+    initWeather();
+});
+
+// --- Drag and Drop for Squads ---
+
+let dragSrcEl = null;
+
+function handleDragStart(e) {
+    dragSrcEl = this;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+    this.classList.add('dragging');
+}
+
+function handleDragOver(e) {
+    if (e.preventDefault) {
+        e.preventDefault();
+    }
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function handleDragEnter(e) {
+    this.classList.add('over');
+}
+
+function handleDragLeave(e) {
+    this.classList.remove('over');
+}
+
+function handleDrop(e) {
+    if (e.stopPropagation) {
+        e.stopPropagation();
+    }
+
+    if (dragSrcEl !== this) {
+        // Swap DOM elements
+        const container = document.getElementById('squad-list');
+        const cards = Array.from(container.children);
+        const srcIndex = cards.indexOf(dragSrcEl);
+        const targetIndex = cards.indexOf(this);
+
+        if (srcIndex < targetIndex) {
+            container.insertBefore(dragSrcEl, this.nextSibling);
+        } else {
+            container.insertBefore(dragSrcEl, this);
+        }
+
+        // Save new order
+        saveSquadOrder();
+    }
+
+    return false;
+}
+
+function handleDragEnd(e) {
+    const listItems = document.querySelectorAll('.squad-card');
+    [].forEach.call(listItems, function (col) {
+        col.classList.remove('over');
+        col.classList.remove('dragging');
+    });
+}
+
+// Add global dragend listener since 'drop' handles the drop logic but 'dragend' cleanup is safer on source
+document.addEventListener('dragend', function (e) {
+    if (e.target.classList.contains('squad-card')) {
+        handleDragEnd(e);
+    }
+});
+
+async function saveSquadOrder() {
+    const container = document.getElementById('squad-list');
+    const cards = Array.from(container.children);
+    const order = cards.map(card => parseInt(card.dataset.id));
+
+    try {
+        await fetch('/api/squads/reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order: order })
+        });
+    } catch (e) {
+        console.error("Order save failed:", e);
+    }
+}
+
+// --- Drag Squad to Mission ---
+
+function allowDrop(e) {
+    e.preventDefault();
+}
+
+async function handleMissionDrop(e, mission) {
+    e.preventDefault();
+    if (!dragSrcEl || !dragSrcEl.classList.contains('squad-card')) return;
+
+    const squadId = parseInt(dragSrcEl.dataset.id);
+    if (!squadId) return;
+
+    // Check if squad already assigned?
+    const alreadyAssigned = mission.squads.some(s => s.id === squadId);
+    if (alreadyAssigned) return;
+
+    try {
+        // 1. Update Mission: Add Squad
+        const currentSquadIds = mission.squads.map(s => s.id);
+        const newSquadIds = [...currentSquadIds, squadId];
+
+        await fetch(`/api/missions/${mission.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ squad_ids: newSquadIds })
+        });
+
+        // 2. Update Squad Status to '3' (zBO)
+        await fetch(`/api/squads/${squadId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: '3' }) // zBO
+        });
+
+        loadData();
+    } catch (err) {
+        console.error("Failed to assign squad to mission:", err);
+        alert("Fehler beim Zuweisen des Trupps.");
     }
 }

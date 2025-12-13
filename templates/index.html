@@ -13,7 +13,7 @@
     <div id="welcome-screen" class="welcome-screen">
         <div class="welcome-left">
             <div class="welcome-content">
-                <h1>Johanniter Mission Control</h1>
+                <h1>Johanniter<br>Mission Control</h1>
                 <p class="welcome-subtitle">Einsatzleitung & Protokollierung</p>
 
                 <div class="welcome-actions">
@@ -26,6 +26,9 @@
                         Tutorial
                     </button>
                 </div>
+                <div class="welcome-copyright">
+                    <small>Projekt von Noah Elvis Oberkofler und Moritz Schelten<br>Proof of Concept</small>
+                </div>
             </div>
         </div>
         <div class="welcome-right">
@@ -36,7 +39,10 @@
     <!-- Shift Setup Modal (opened from welcome screen) -->
     <div id="shift-setup-modal" class="modal">
         <div class="modal-content">
-            <h2>Dienst konfigurieren</h2>
+            <div class="modal-header">
+                <h2>Dienst konfigurieren</h2>
+                <button class="close-btn" onclick="closeModal('shift-setup-modal')">&times;</button>
+            </div>
             <form id="shift-setup-form" onsubmit="startShift(event)">
                 <div class="form-group">
                     <label>Name des Dienstes / Einsatzort (Optional)</label>
@@ -53,19 +59,16 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Initiale Trupps (Kommagetrennt)</label>
-                    <input type="text" id="conf-squads" placeholder="Trupp 1, Trupp 2, NEF"
-                        value="Trupp 1, Trupp 2, Trupp 3, NEF, RTW">
-                </div>
-
-                <div class="form-group">
-                    <label>Standard Einsatzorte (Kommagetrennt)</label>
-                    <input type="text" id="conf-locs" value="Hauptplatz, Bahnhof, San-Zelt">
+                    <label>Anzahl initialer Trupps</label>
+                    <div class="number-control">
+                        <div class="btn-counter" onclick="changeSquadCount(-1)">-</div>
+                        <input type="number" id="conf-squad-count" min="0" max="20" value="0" readonly>
+                        <div class="btn-counter" onclick="changeSquadCount(1)">+</div>
+                    </div>
+                    <div id="squad-inputs-container" class="squad-inputs-grid"></div>
                 </div>
 
                 <div style="text-align: right;">
-                    <button type="button" class="btn-secondary"
-                        onclick="closeModal('shift-setup-modal')">Abbrechen</button>
                     <button type="submit" class="btn-primary">Dienst starten</button>
                 </div>
             </form>
@@ -79,52 +82,131 @@
                 <h2>Tutorial - Mission Control</h2>
                 <button class="close-btn" onclick="closeModal('tutorial-modal')">&times;</button>
             </div>
-            <div class="tutorial-content">
-                <h3>Willkommen bei Johanniter Mission Control</h3>
-                <p>Diese Anwendung hilft Ihnen bei der Einsatzleitung und Protokollierung.</p>
+            <div class="tutorial-body">
+                <!-- Slide 1: Welcome -->
+                <div class="tutorial-slide active" data-step="0">
+                    <h3>Willkommen bei Johanniter Mission Control</h3>
+                    <p>Diese Anwendung unterstützt Sie bei der digitalen Einsatzleitung und Protokollierung.</p>
+                    <div class="tutorial-feature-list">
+                        <div class="feature-item">
+                            <span class="feature-icon">🚀</span>
+                            <strong>Dienst starten</strong>
+                            <p>Konfigurieren Sie Einsatzort und initiale Ressourcen.</p>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">👥</span>
+                            <strong>Trupps verwalten</strong>
+                            <p>Status per Klick ändern, neue Trupps hinzufügen.</p>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">📝</span>
+                            <strong>Einsätze</strong>
+                            <p>Vollständige Dokumentation von Alarmierung bis Abschluss.</p>
+                        </div>
+                    </div>
+                </div>
 
-                <h4>Hauptfunktionen:</h4>
-                <ul>
-                    <li><strong>Dienst starten:</strong> Konfigurieren Sie einen neuen Dienst mit Trupps und
-                        Einsatzorten</li>
-                    <li><strong>Trupps verwalten:</strong> Erstellen und bearbeiten Sie Trupps, ändern Sie deren Status
-                    </li>
-                    <li><strong>Einsätze dokumentieren:</strong> Erfassen Sie Einsätze mit allen Details</li>
-                    <li><strong>Protokoll:</strong> Alle Änderungen werden automatisch protokolliert</li>
-                    <li><strong>Export:</strong> Exportieren Sie das Protokoll als Textdatei</li>
-                </ul>
+                <!-- Slide 2: Squads -->
+                <div class="tutorial-slide" data-step="1">
+                    <h3>Trupp-Verwaltung</h3>
+                    <p>Behalten Sie den Überblick über alle Einheiten.</p>
+                    <ul>
+                        <li><strong>Status ändern:</strong> Klicken Sie direkt auf die Buttons (EB, BO, AO, ...).</li>
+                        <li><strong>Timer:</strong> Sehen Sie sofort, wie lange ein Trupp schon im aktuellen Status ist.
+                        </li>
+                        <li><strong>Bearbeiten:</strong> Nutzen Sie das Stift-Symbol ✎ beim Trupp, um Besatzung oder
+                            Qualifikation zu ändern.</li>
+                    </ul>
+                    <div class="tutorial-tip">
+                        💡 <strong>Tipp:</strong> Sie können jederzeit neue Trupps über das <strong>+</strong> Symbol in
+                        der Trupp-Leiste hinzufügen.
+                    </div>
+                </div>
 
-                <h4>Status-Codes:</h4>
-                <ul>
-                    <li><strong>EB</strong> - Einsatzbereit</li>
-                    <li><strong>zBO</strong> - Zum Berufungsort</li>
-                    <li><strong>BO</strong> - Am Berufungsort</li>
-                    <li><strong>zAO</strong> - Zum Abgabeort</li>
-                    <li><strong>AO</strong> - Am Abgabeort</li>
-                    <li><strong>Pause</strong> - Pause</li>
-                    <li><strong>NEB</strong> - Nicht Einsatzbereit</li>
-                </ul>
+                <!-- Slide 3: Missions -->
+                <div class="tutorial-slide" data-step="2">
+                    <h3>Einsatz-Erfassung</h3>
+                    <p>Erstellen Sie neue Einsätze über <strong>+ Neuer Einsatz</strong>.</p>
+                    <ul>
+                        <li><strong>Zuordnung:</strong> Wählen Sie beteiligte Trupps direkt aus.</li>
+                        <li><strong>Live-Status:</strong> Der Status der Trupps wird im Einsatz angezeigt.</li>
+                        <li><strong>Abschluss:</strong> Wenn ein Einsatz beendet ist, wählen Sie einen Ausgang (z.B.
+                            "Belassen").</li>
+                    </ul>
+                </div>
+
+                <!-- Slide 4: Protocol & Export -->
+                <div class="tutorial-slide" data-step="3">
+                    <h3>Protokoll & Export</h3>
+                    <p>Alles wird im Hintergrund mitgeschrieben.</p>
+                    <ul>
+                        <li><strong>Protokoll:</strong> Klicken Sie auf "Protokoll", um den gesamten Verlauf zu sehen.
+                        </li>
+                        <li><strong>Änderungen:</strong> Das Ticker-Band unten zeigt immer die letzte Aktivität.</li>
+                        <li><strong>Export:</strong> Nutzen Sie "Exportieren", um eine Textdatei für Ihre Ablage zu
+                            generieren.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="tutorial-footer">
+                <div class="step-dots">
+                    <span class="dot active"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+                <div class="tutorial-buttons">
+                    <button id="btn-tut-prev" class="btn-secondary" onclick="prevTutorialStep()"
+                        disabled>Zurück</button>
+                    <button id="btn-tut-next" class="btn-primary" onclick="nextTutorialStep()">Weiter</button>
+                </div>
             </div>
         </div>
     </div>
 
     <header>
         <div class="header-left">
-            <h1>Einsatzleitung</h1>
+            <div class="header-title-row">
+                <h1>Einsatzleitung</h1>
+                <button id="btn-config" class="icon-btn header-icon-btn" onclick="openConfigModal()"
+                    title="Dienst bearbeiten">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                        </path>
+                    </svg>
+                </button>
+                <button id="btn-help" class="icon-btn header-icon-btn" onclick="openTutorial()"
+                    title="Hilfe / Tutorial">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                </button>
+            </div>
             <span id="shift-location" class="subtitle"></span>
-            <button class="icon-btn" onclick="openConfigModal()" title="Dienst bearbeiten">⚙️</button>
         </div>
 
         <div class="header-center">
-            <div id="clock" class="clock">--:--:--</div>
-            <div id="date" class="date">--.--.----</div>
+            <div class="time-container">
+                <div id="clock" class="clock">--:--:--</div>
+                <div id="date" class="date">--.--.----</div>
+            </div>
+            <div id="weather-widget" class="weather-widget hidden">
+                <span id="weather-icon" class="weather-icon"></span>
+                <span id="weather-temp" class="weather-temp">--°C</span>
+            </div>
         </div>
 
         <div class="header-actions">
-            <button onclick="openLogModal()">Protokoll</button>
-            <button onclick="openNewMissionModal()">+ Neuer Einsatz</button>
-            <button onclick="window.location.href='/api/export'">Exportieren</button>
-            <button onclick="endShift()" class="btn-danger">Dienst beenden</button>
+            <button id="btn-log" onclick="openLogModal()">Protokoll</button>
+            <button id="btn-export" onclick="window.location.href='/api/export'">Exportieren</button>
+            <button id="btn-end-shift" onclick="endShift()" class="btn-danger">Dienst beenden</button>
         </div>
     </header>
 
@@ -143,8 +225,8 @@
         <!-- Mission Panel -->
         <section class="mission-panel">
             <div class="panel-header" id="mission-panel-header">
-                <span>Einsatztagebuch <span id="mission-stats"
-                        style="font-size:0.9rem; margin-left:1rem; font-weight:normal; opacity:0.8;"></span></span>
+                <span>Einsatztagebuch <span id="mission-stats"></span></span>
+                <button class="btn-gray" onclick="openNewMissionModal()">+ Neuer Einsatz</button>
             </div>
             <div id="mission-list" class="mission-list">
                 <!-- Missions loaded here -->
@@ -154,13 +236,17 @@
 
     <!-- Logs / Ticker Bar -->
     <footer id="ticker-bar">
-        Letzte Änderung: <span id="last-log">...</span>
+        <span>Letzte Änderung: <span id="last-log">...</span></span>
+        <span class="ticker-copyright">&copy; Noah Elvis Oberkofler & Moritz Schelten</span>
     </footer>
 
     <!-- New Mission Modal -->
     <div id="new-mission-modal" class="modal">
         <div class="modal-content">
-            <h2>Neuer Einsatz</h2>
+            <div class="modal-header">
+                <h2 id="mission-modal-title">Neuer Einsatz</h2>
+                <button class="close-btn" onclick="closeModal('new-mission-modal')">&times;</button>
+            </div>
             <form id="new-mission-form" onsubmit="submitMission(event)">
                 <input type="hidden" id="edit-mission-id">
 
@@ -210,28 +296,49 @@
                     <label>Ausgang des Einsatzes <span style="color:red;">*</span></label>
                     <select id="m-outcome">
                         <option value="">-- Bitte wählen --</option>
-                        <option value="Inter Unter">Inter Unter (Intervention Unterblieben)</option>
-                        <option value="Belassen">Belassen (Vor Ort belassen)</option>
+                        <option value="Intervention unterblieben">Intervention unterblieben</option>
+                        <option value="Belassen">Belassen (vor Ort belassen)</option>
                         <option value="ARM">ARM (Anderes Rettungsmittel)</option>
                         <option value="PVW">PVW (Patient verweigert)</option>
                     </select>
                 </div>
 
-                <div style="text-align: right;">
-                    <button type="button" class="btn-secondary"
-                        onclick="closeModal('new-mission-modal')">Abbrechen</button>
-                    <button type="submit" class="btn-primary">Speichern</button>
+                <div class="modal-footer">
+                    <button type="button" class="btn-danger" id="btn-delete-mission" onclick="openDeleteMissionModal()"
+                        style="display:none;">Löschen</button>
+                    <!-- Cancel Removed -->
                     <button type="button" class="btn-success" id="btn-complete-mission" onclick="completeMission()"
                         style="display:none;">Abschließen</button>
+                    <button type="submit" class="btn-primary">Speichern</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-mission-modal" class="modal">
+        <div class="modal-content small" style="text-align: center;">
+            <div class="modal-header">
+                <h2>Einsatz Löschen</h2>
+                <button class="close-btn" onclick="closeModal('delete-mission-modal')">&times;</button>
+            </div>
+            <p>Bitte geben Sie einen Grund für das Löschen an:</p>
+            <textarea id="delete-mission-reason" rows="3" style="width: 100%; margin-bottom: 1rem;"
+                placeholder="Begründung..."></textarea>
+            <div class="modal-footer" style="justify-content: center;">
+                <!-- Cancel Removed -->
+                <button class="btn-danger" onclick="confirmDeleteMission()">Endgültig Löschen</button>
+            </div>
         </div>
     </div>
 
     <!-- Squad Modal -->
     <div id="squad-modal" class="modal">
         <div class="modal-content small">
-            <h2 id="squad-modal-title">Neuer Trupp</h2>
+            <div class="modal-header">
+                <h2 id="squad-modal-title">Neuer Trupp</h2>
+                <button class="close-btn" onclick="closeModal('squad-modal')">&times;</button>
+            </div>
             <form id="s-form" onsubmit="submitSquad(event)">
                 <input type="hidden" id="s-id">
                 <div class="form-group">
@@ -245,13 +352,7 @@
                 <div class="modal-footer">
                     <button type="button" id="btn-delete-squad" class="btn-danger" onclick="deleteSquad()"
                         style="display:none;">Löschen</button>
-                    <!-- Spacer for when Delete is hidden? No, space-between works well with 2 or 3 items if we want full spread. 
-                         But usually Cancel/Save should be close. 
-                         User asked for Symmetry.
-                         Let's try: Delete (Left), Cancel (Center), Save (Right) implies 3 columns.
-                         Or just space-between.
-                    -->
-                    <button type="button" class="btn-secondary" onclick="closeModal('squad-modal')">Abbrechen</button>
+                    <!-- Cancel Removed -->
                     <button type="submit" class="btn-primary">Speichern</button>
                 </div>
             </form>
@@ -285,7 +386,10 @@
     <!-- Config Edit Modal -->
     <div id="config-modal" class="modal">
         <div class="modal-content">
-            <h2>Dienst bearbeiten</h2>
+            <div class="modal-header">
+                <h2>Dienst bearbeiten</h2>
+                <button class="close-btn" onclick="closeModal('config-modal')">&times;</button>
+            </div>
             <form onsubmit="updateConfig(event)">
                 <div class="form-group">
                     <label>Name des Dienstes / Einsatzort</label>
@@ -312,14 +416,15 @@
                     <small>Plain-Text-Datei mit einem Ort pro Zeile</small>
                 </div>
 
-                <div style="text-align: right;">
-                    <button type="button" class="btn-secondary" onclick="closeModal('config-modal')">Abbrechen</button>
+                <div class="modal-footer">
+                    <!-- Cancel Removed -->
                     <button type="submit" class="btn-primary">Speichern</button>
                 </div>
             </form>
         </div>
     </div>
 
+    <div id="guide-overlay" class="guide-overlay"></div>
     <script src="{{ url_for('static', filename='script.js') }}?v={{ last_updated }}"></script>
 </body>
 

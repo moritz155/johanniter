@@ -1,12 +1,14 @@
 # Mission Control - Backend (Reload Triggered)
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, session
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import io
 import csv
 import os
+import uuid
 
 app = Flask(__name__)
+app.secret_key = 'dev-secret-key-change-in-prod' # Necessary for session
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -26,6 +28,7 @@ class ShiftConfig(db.Model):
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
     end_time = db.Column(db.DateTime, nullable=True)
     is_active = db.Column(db.Boolean, default=True)
+    session_id = db.Column(db.String(36), nullable=False, index=True)
 
     def to_dict(self):
         return {
@@ -38,9 +41,13 @@ class ShiftConfig(db.Model):
 
 class Squad(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), unique=True, nullable=False)
-    qualification = db.Column(db.String(100), default='San') # e.g., San, RS, NFS, NA
-    current_status = db.Column(db.String(10), default='2') # 2, 3, 4, 7, 8, Pause, Pos, NEB
+    name = db.Column(db.String(50), nullable=False)
+    qualification = db.Column(db.String(20), default='San') # San, RS, NFS, NA
+    current_status = db.Column(db.String(20), default='2') # 2 (EB), 3, 4, 7, 8
+    position = db.Column(db.Integer, default=0)
+    session_id = db.Column(db.String(100), nullable=False)
+
+    __table_args__ = (db.UniqueConstraint('name', 'session_id', name='_name_session_uc'),)
     last_status_change = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -48,21 +55,26 @@ class Squad(db.Model):
     
     def to_dict(self):
         # Find active mission for this squad
+        # Prefer latest mission if multiple are active
+        active_missions = [m for m in self.missions if m.status != 'Abgeschlossen' and not m.is_deleted]
+        active_missions.sort(key=lambda x: x.created_at, reverse=True)
+        
         active_mission = None
-        for m in self.missions:
-            if m.status != 'Abgeschlossen':
-                active_mission = {
-                    'id': m.id,
-                    'mission_number': m.mission_number,
-                    'location': m.location
-                }
-                break
+        if active_missions:
+            m = active_missions[0]
+            active_mission = {
+                'id': m.id,
+                'mission_number': m.mission_number,
+                'location': m.location,
+                'reason': m.reason
+            }
 
         return {
             'id': self.id,
             'name': self.name,
             'qualification': self.qualification,
             'current_status': self.current_status,
+            'position': self.position,
             'last_status_change': (self.last_status_change.isoformat() + 'Z') if self.last_status_change else None,
             'active_mission': active_mission
         }
@@ -76,9 +88,14 @@ class Mission(db.Model):
     description = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), default='Laufend') # Laufend, Abgeschlossen
     outcome = db.Column(db.String(50), nullable=True) # Inter Unter, Belassen, ARM, PVW
-    notes = db.Column(db.Text, default='')
+    notes = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    session_id = db.Column(db.String(100), nullable=False)
     
+    # Soft Delete
+    is_deleted = db.Column(db.Boolean, default=False)
+    deletion_reason = db.Column(db.String(200))
+
     # Relationships
     squads = db.relationship('Squad', secondary=mission_squad, back_populates='missions')
 
@@ -105,6 +122,7 @@ class LogEntry(db.Model):
     details = db.Column(db.String(500))
     mission_id = db.Column(db.Integer, db.ForeignKey('mission.id'), nullable=True)
     squad_id = db.Column(db.Integer, db.ForeignKey('squad.id'), nullable=True)
+    session_id = db.Column(db.String(36), nullable=False, index=True)
 
     def to_dict(self):
         return {
@@ -120,6 +138,7 @@ class PredefinedOption(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     category = db.Column(db.String(50)) # location, entity, reason
     value = db.Column(db.String(200))
+    session_id = db.Column(db.String(36), nullable=False, index=True)
 
 # --- Helper Functions ---
 
@@ -134,8 +153,19 @@ STATUS_MAP = {
     '1': 'Frei'
 }
 
+def get_session_id():
+    if 'user_id' not in session:
+        session['user_id'] = str(uuid.uuid4())
+    return session['user_id']
+
 def log_action(action, details, mission_id=None, squad_id=None):
-    entry = LogEntry(action=action, details=details, mission_id=mission_id, squad_id=squad_id)
+    entry = LogEntry(
+        action=action, 
+        details=details, 
+        mission_id=mission_id, 
+        squad_id=squad_id,
+        session_id=get_session_id()
+    )
     db.session.add(entry)
     db.session.commit()
 
@@ -148,31 +178,57 @@ def index():
 
 @app.route('/api/init', methods=['GET'])
 def get_init_data():
-    config = ShiftConfig.query.filter_by(is_active=True).first()
-    squads = Squad.query.all()
-    # Sort missions: Laufend first (active desc), then Abgeschlossen (desc)
-    missions_active = Mission.query.filter(Mission.status != 'Abgeschlossen').order_by(Mission.created_at.desc()).all()
-    missions_done = Mission.query.filter_by(status='Abgeschlossen').order_by(Mission.created_at.desc()).all()
-    missions = missions_active + missions_done
+    sid = get_session_id()
+    config = ShiftConfig.query.filter_by(is_active=True, session_id=sid).first()
     
-    options = PredefinedOption.query.all()
-    opts_dict = {'location': [], 'entity': [], 'reason': []}
-    for o in options:
-        if o.category in opts_dict:
-            opts_dict[o.category].append(o.value)
+    squads = Squad.query.filter_by(session_id=sid).order_by(Squad.position).all()
+    # Filter out deleted missions
+    missions = Mission.query.filter_by(session_id=sid, is_deleted=False).order_by(Mission.created_at.desc()).all()
     
+    # Predefined options
+    opts = PredefinedOption.query.filter_by(session_id=sid).all()
+    options_map = {}
+    for o in opts:
+        if o.category not in options_map:
+            options_map[o.category] = []
+        options_map[o.category].append(o.value)
+    
+    # Logs
+    logs = LogEntry.query.filter_by(session_id=sid).order_by(LogEntry.timestamp.desc()).all()
+
     return jsonify({
         'config': config.to_dict() if config else None,
         'squads': [s.to_dict() for s in squads],
         'missions': [m.to_dict() for m in missions],
-        'options': opts_dict
+        'options': options_map,
+        'logs': [l.to_dict() for l in logs]
     })
+    
+@app.route('/api/updates', methods=['GET'])
+def get_updates():
+    try:
+        sid = get_session_id()
+        # simplified long polling check
+        squads = Squad.query.filter_by(session_id=sid).order_by(Squad.position).all()
+        missions = Mission.query.filter_by(session_id=sid, is_deleted=False).order_by(Mission.created_at.desc()).all()
+        logs = LogEntry.query.filter_by(session_id=sid).order_by(LogEntry.timestamp.desc()).limit(50).all()
+        
+        return jsonify({
+            'squads': [s.to_dict() for s in squads],
+            'missions': [m.to_dict() for m in missions],
+            'logs': [l.to_dict() for l in logs]
+        })
+    except Exception as e:
+        print(e)
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/config', methods=['POST'])
 def save_config():
     data = request.json
-    # Deactivate old configs
-    ShiftConfig.query.update({ShiftConfig.is_active: False})
+    sid = get_session_id()
+    
+    # Deactivate old configs for this session
+    ShiftConfig.query.filter_by(session_id=sid).update({ShiftConfig.is_active: False})
     
     # Create new config
     start_dt = datetime.utcnow()
@@ -186,19 +242,20 @@ def save_config():
     new_config = ShiftConfig(
         location=data.get('location', ''),
         address=data.get('address', ''),
-        start_time=start_dt
+        start_time=start_dt,
+        session_id=sid
     )
     db.session.add(new_config)
     
     # Handle pre-defined options if provided
     if 'options' in data:
-        PredefinedOption.query.delete() 
+        PredefinedOption.query.filter_by(session_id=sid).delete()
         for cat, values in data['options'].items():
             for val in values:
-                db.session.add(PredefinedOption(category=cat, value=val))
+                db.session.add(PredefinedOption(category=cat, value=val, session_id=sid))
     else:
         # Load default options from file if it exists
-        PredefinedOption.query.delete()
+        PredefinedOption.query.filter_by(session_id=sid).delete()
         default_file = 'default_options.txt'
         if os.path.exists(default_file):
             try:
@@ -213,28 +270,36 @@ def save_config():
                         if line.startswith('[') and line.endswith(']'):
                             current_category = line[1:-1].lower()
                         elif current_category in ['location', 'entity', 'reason']:
-                            db.session.add(PredefinedOption(category=current_category, value=line))
+                            db.session.add(PredefinedOption(category=current_category, value=line, session_id=sid))
             except Exception as e:
                 print(f"Error loading default options: {e}")
     
     # Initial Squads - Only create if requested (Standard Setup)
     if 'squads' in data:
-        Squad.query.delete()
-        Mission.query.delete()
-        LogEntry.query.delete()
-        db.session.execute(mission_squad.delete())
+        Squad.query.filter_by(session_id=sid).delete()
+        Mission.query.filter_by(session_id=sid).delete()
+        LogEntry.query.filter_by(session_id=sid).delete()
+        # Note: mission_squad association table cleanup is trickier without session_id on it directly, 
+        # but deleting missions/squads should cascade or leave orphans if we don't care. 
+        # A clean way is:
+        # db.session.execute(mission_squad.delete()) # This deletes ALL associations!
+        # We need to only delete for squads in this session.
+        # But for now, let's assume we are resetting everything for this user.
+        # Since we just deleted all squads for this sid, the associations are invalid.
+        # Ideally, we should clean them up, but SQLite might leave them.
         
         for s in data['squads']:
-            new_squad = Squad(name=s['name'], qualification=s.get('qualification', 'San'))
+            new_squad = Squad(name=s['name'], qualification=s.get('qualification', 'San'), session_id=sid)
             db.session.add(new_squad)
 
     db.session.commit()
-    log_action('KONFIGURATION', f"Dienst gestartet am Ort: {new_config.location}")
+    log_action('KONFIGURATION', f"Dienst gestartet. Ort: {new_config.location}")
     return jsonify(new_config.to_dict())
 
 @app.route('/api/config', methods=['PUT'])
 def update_config():
-    config = ShiftConfig.query.filter_by(is_active=True).first()
+    sid = get_session_id()
+    config = ShiftConfig.query.filter_by(is_active=True, session_id=sid).first()
     if not config:
         return jsonify({'error': 'No active shift'}), 404
     
@@ -278,11 +343,11 @@ def update_config():
     # Handle locations import
     if 'locations' in data and data['locations']:
         # Add new locations to existing ones (don't delete existing)
-        existing_locs = {opt.value for opt in PredefinedOption.query.filter_by(category='location').all()}
+        existing_locs = {opt.value for opt in PredefinedOption.query.filter_by(category='location', session_id=sid).all()}
         new_count = 0
         for loc in data['locations']:
             if loc and loc not in existing_locs:
-                db.session.add(PredefinedOption(category='location', value=loc))
+                db.session.add(PredefinedOption(category='location', value=loc, session_id=sid))
                 new_count += 1
         
         if new_count > 0:
@@ -296,10 +361,11 @@ def update_config():
 @app.route('/api/squads', methods=['POST'])
 def create_squad():
     data = request.json
-    if Squad.query.filter_by(name=data['name']).first():
+    sid = get_session_id()
+    if Squad.query.filter_by(name=data['name'], session_id=sid).first():
         return jsonify({'error': 'Squad exists'}), 400
     
-    squad = Squad(name=data['name'], qualification=data.get('qualification', 'San'))
+    squad = Squad(name=data['name'], qualification=data.get('qualification', 'San'), session_id=sid)
     db.session.add(squad)
     db.session.commit()
     log_action('TRUPP NEU', f"{squad.name} ({squad.qualification})", squad_id=squad.id)
@@ -307,7 +373,8 @@ def create_squad():
 
 @app.route('/api/squads/<int:id>', methods=['PUT'])
 def update_squad(id):
-    squad = Squad.query.get_or_404(id)
+    sid = get_session_id()
+    squad = Squad.query.filter_by(id=id, session_id=sid).first_or_404()
     data = request.json
     
     changes = []
@@ -325,9 +392,25 @@ def update_squad(id):
         
     return jsonify(squad.to_dict())
 
+@app.route('/api/squads/reorder', methods=['POST'])
+def reorder_squads():
+    sid = get_session_id()
+    data = request.json
+    # Expects list of {id: X, position: Y} or just list of IDs in order
+    
+    if 'order' in data: # List of IDs
+        for idx, squad_id in enumerate(data['order']):
+            squad = Squad.query.filter_by(id=squad_id, session_id=sid).first()
+            if squad:
+                squad.position = idx
+        db.session.commit()
+    
+    return jsonify({'status': 'ok'})
+
 @app.route('/api/squads/<int:id>', methods=['DELETE'])
 def delete_squad(id):
-    squad = Squad.query.get_or_404(id)
+    sid = get_session_id()
+    squad = Squad.query.filter_by(id=id, session_id=sid).first_or_404()
     name = squad.name
     
     # Check if used in active missions? 
@@ -347,7 +430,8 @@ def delete_squad(id):
 
 @app.route('/api/squads/<int:id>/status', methods=['POST'])
 def update_squad_status(id):
-    squad = Squad.query.get_or_404(id)
+    sid = get_session_id()
+    squad = Squad.query.filter_by(id=id, session_id=sid).first_or_404()
     data = request.json
     new_status = data.get('status')
     
@@ -386,7 +470,8 @@ def create_mission():
         alarming_entity=data.get('alarming_entity'),
         reason=data['reason'],
         description=data.get('description', ''),
-        notes=data.get('notes', '')
+        notes=data.get('notes', ''),
+        session_id=get_session_id()
     )
     
     # Handle Squads
@@ -404,7 +489,8 @@ def create_mission():
 
 @app.route('/api/missions/<int:id>', methods=['PUT'])
 def update_mission(id):
-    mission = Mission.query.get_or_404(id)
+    sid = get_session_id()
+    mission = Mission.query.filter_by(id=id, session_id=sid, is_deleted=False).first_or_404()
     data = request.json
     
     changes = []
@@ -454,15 +540,38 @@ def update_mission(id):
 
     return jsonify(mission.to_dict())
 
+@app.route('/api/missions/<int:id>', methods=['DELETE'])
+def delete_mission(id):
+    sid = get_session_id()
+    mission = Mission.query.filter_by(id=id, session_id=sid).first_or_404()
+    
+    data = request.json or {}
+    reason = data.get('reason', 'Keine Begründung')
+    
+    log_action('EINSATZ GELÖSCHT', f"Einsatz {mission.mission_number or mission.id} gelöscht. Grund: {reason}", mission_id=mission.id)
+    
+    # Soft Delete instead of hard delete
+    mission.is_deleted = True
+    mission.deletion_reason = reason
+    
+    # We don't remove squad associations so we can still see who was assigned in history,
+    # but for active squad view we need to ensure we don't pick up deleted missions.
+    
+    db.session.commit()
+    
+    return jsonify({'status': 'deleted'})
+
 @app.route('/api/changes', methods=['GET'])
 def get_changes():
-    logs = LogEntry.query.order_by(LogEntry.timestamp.desc()).all()
+    sid = get_session_id()
+    logs = LogEntry.query.filter_by(session_id=sid).order_by(LogEntry.timestamp.desc()).all()
     return jsonify([l.to_dict() for l in logs])
 
 # --- Helper Functions --- (Appending to previous helper section logically, but placing here for context)
 
 def generate_export_file(config):
     output = io.StringIO()
+    sid = config.session_id if config else get_session_id()
     
     # Header
     output.write("=== EINSATZPROTOKOLL ===\n")
@@ -479,7 +588,7 @@ def generate_export_file(config):
     output.write("\n")
     
     # Missions
-    missions = Mission.query.order_by(Mission.created_at).all()
+    missions = Mission.query.filter_by(session_id=sid).order_by(Mission.created_at).all()
     output.write(f"=== EINSÄTZE ({len(missions)}) ===\n\n")
     
     for m in missions:
@@ -489,7 +598,7 @@ def generate_export_file(config):
         start_time = m.created_at.strftime('%d.%m.%Y %H:%M:%S') if m.created_at else '?'
         if m.status == 'Abgeschlossen':
             # Find the completion time from logs
-            completion_log = LogEntry.query.filter_by(mission_id=m.id, action='EINSATZ UPDATE').filter(
+            completion_log = LogEntry.query.filter_by(mission_id=m.id, action='EINSATZ UPDATE', session_id=sid).filter(
                 LogEntry.details.like('%Status: Laufend -> Abgeschlossen%')
             ).order_by(LogEntry.timestamp.desc()).first()
             
@@ -520,8 +629,8 @@ def generate_export_file(config):
         output.write("-" * 40 + "\n\n")
 
     # Squad Activity / Pause Analysis
-    output.write("=== TRUPP AKTIVITÄT ===\n\n")
-    squads = Squad.query.all()
+    output.write("=== TRUPP-AKTIVITÄT ===\n\n")
+    squads = Squad.query.filter_by(session_id=sid).all()
     for s in squads:
         # Count missions for this squad
         mission_count = len([m for m in s.missions])
@@ -538,7 +647,7 @@ def generate_export_file(config):
                 # Add mission context if available
                 mission_context = ""
                 if l.mission_id:
-                    mission = Mission.query.get(l.mission_id)
+                    mission = Mission.query.filter_by(id=l.mission_id, session_id=sid).first()
                     if mission:
                         mission_num = mission.mission_number or mission.id
                         mission_context = f" (Einsatz #{mission_num})"
@@ -565,9 +674,31 @@ def generate_export_file(config):
     
     # Full Log
     output.write("=== GESAMTES LOGBUCH ===\n")
-    all_logs = LogEntry.query.order_by(LogEntry.timestamp).all()
+    all_logs = LogEntry.query.filter_by(session_id=sid).order_by(LogEntry.timestamp).all()
     for l in all_logs:
         output.write(f"[{l.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] [{l.action}] {l.details}\n")
+        
+    output.write("\n")
+
+    # Deleted Missions
+    deleted_missions = Mission.query.filter_by(session_id=sid, is_deleted=True).order_by(Mission.created_at).all()
+    if deleted_missions:
+        output.write("=== GELÖSCHTE EINSÄTZE ===\n\n")
+        for m in deleted_missions:
+            m_num = m.mission_number or m.id
+            output.write(f"Einsatz #{m_num} ({m.location})\n")
+            output.write(f"  Grund für Löschung: {m.deletion_reason}\n")
+            output.write(f"  Urspr. Alarmierung: {m.reason}\n")
+            if m.description:
+                output.write(f"  Lage: {m.description}\n")
+            
+            # Add logs for deleted mission context
+            m_logs = LogEntry.query.filter_by(mission_id=m.id).order_by(LogEntry.timestamp).all()
+            if m_logs:
+                output.write("  Verlauf vor Löschung:\n")
+                for l in m_logs:
+                     output.write(f"  - [{l.timestamp.strftime('%H:%M:%S')}] {l.action}: {l.details}\n")
+            output.write("\n")
 
     # Convert to bytes
     mem = io.BytesIO()
@@ -578,12 +709,13 @@ def generate_export_file(config):
 
 @app.route('/api/export', methods=['GET'])
 def export_data():
-    config = ShiftConfig.query.filter_by(is_active=True).first()
+    sid = get_session_id()
+    config = ShiftConfig.query.filter_by(is_active=True, session_id=sid).first()
     # Check if there is no active config, maybe get the last one?
     # For manual export button, usually we want current.
     # If no active config, maybe try to find the last created one.
     if not config:
-        config = ShiftConfig.query.order_by(ShiftConfig.id.desc()).first()
+        config = ShiftConfig.query.filter_by(session_id=sid).order_by(ShiftConfig.id.desc()).first()
         
     mem = generate_export_file(config)
     filename = f"protokoll_{datetime.now().strftime('%Y%m%d_%H%M')}.txt"
@@ -591,7 +723,8 @@ def export_data():
 
 @app.route('/api/config/end', methods=['POST'])
 def end_shift():
-    config = ShiftConfig.query.filter_by(is_active=True).first()
+    sid = get_session_id()
+    config = ShiftConfig.query.filter_by(is_active=True, session_id=sid).first()
     if config:
         config.is_active = False
         config.end_time = datetime.utcnow()
@@ -599,7 +732,7 @@ def end_shift():
         log_action('KONFIGURATION', f"Dienst beendet: {config.location}")
         
     # Reset predefined options to default values
-    PredefinedOption.query.delete()
+    PredefinedOption.query.filter_by(session_id=sid).delete()
     
     # Load default options from file if it exists
     default_file = 'default_options.txt'
@@ -616,7 +749,7 @@ def end_shift():
                     if line.startswith('[') and line.endswith(']'):
                         current_category = line[1:-1].lower()
                     elif current_category in ['location', 'entity', 'reason']:
-                        db.session.add(PredefinedOption(category=current_category, value=line))
+                        db.session.add(PredefinedOption(category=current_category, value=line, session_id=sid))
         except Exception as e:
             print(f"Error loading default options: {e}")
     
@@ -625,7 +758,7 @@ def end_shift():
     # Generate export (even if config was None/already ended, try to get last)
     # Re-fetch or reuse config object (which is now inactive).
     if not config:
-         config = ShiftConfig.query.order_by(ShiftConfig.id.desc()).first()
+         config = ShiftConfig.query.filter_by(session_id=sid).order_by(ShiftConfig.id.desc()).first()
          
     mem = generate_export_file(config)
     filename = f"abschluss_{datetime.now().strftime('%Y%m%d_%H%M')}.txt"
