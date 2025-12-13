@@ -501,8 +501,7 @@ def update_mission(id):
     
     if 'outcome' in data and data['outcome'] != mission.outcome:
         mission.outcome = data['outcome']
-        if mission.status == 'Abgeschlossen' and mission.outcome:
-            changes.append(f"Ausgang: {mission.outcome}")
+        changes.append(f"Ausgang: {mission.outcome}")
     
     if 'squad_ids' in data:
         # Update roster

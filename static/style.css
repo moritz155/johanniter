@@ -5,6 +5,8 @@
 :root {
     --primary: #d32f2f;
     --primary-dark: #b71c1c;
+    --header-bg: #d32f2f;
+    /* New variable for header customization */
     --bg: #f5f5f5;
     --surface: #ffffff;
     --text: #212121;
@@ -28,6 +30,22 @@
     /* Light Blue */
     --c-NEB: #ff5722;
     /* Deep Orange */
+}
+
+body.dark-mode {
+    --bg: #121212;
+    --surface: #1e1e1e;
+    --text: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --border: #555;
+    /* Lighter border for better visibility */
+
+    /* Slightly desaturated/brighter status colors for dark mode if needed, 
+       but keeping standard for now unless contrast is poor.
+       Maybe adjust primary slightly for dark mode aesthetics */
+    --primary: #ef5350;
+    /* Lighter red for dark background */
+    --primary-dark: #c62828;
 }
 
 body {
@@ -164,7 +182,7 @@ body {
 
 /* Header */
 header {
-    background: var(--primary);
+    background: var(--header-bg);
     color: white;
     padding: 0.5rem 1rem;
     display: flex;
@@ -212,6 +230,24 @@ header {
     padding: 0.5rem 1rem;
     cursor: pointer;
     border-radius: 4px;
+    font-size: 0.9rem;
+    /* Explicit standardized size */
+    line-height: normal;
+}
+
+.header-actions .btn-danger {
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.2);
+    /* Identical to other buttons */
+    color: white;
+}
+
+.header-actions .btn-danger:hover {
+    background: rgba(255, 255, 255, 0.3);
+    /* Identical hover */
 }
 
 .header-actions button:hover {
@@ -261,7 +297,7 @@ main {
 }
 
 .squad-card {
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.75rem;
@@ -405,13 +441,187 @@ main {
     padding: 0.5rem;
 }
 
+/* Dark Mode Overrides for Components */
+body.dark-mode .squad-card,
+body.dark-mode .modal-content {
+    background-color: var(--surface);
+    color: var(--text);
+    border-color: var(--border);
+}
+
+body.dark-mode .mission-card {
+    background-color: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
+    /* Keep the red indicator */
+}
+
+body.dark-mode input,
+body.dark-mode select,
+body.dark-mode textarea {
+    background-color: #2c2c2c;
+    color: var(--text);
+    border-color: var(--border);
+}
+
+body.dark-mode .btn-secondary,
+body.dark-mode .btn-counter,
+body.dark-mode .status-btn {
+    background-color: #333;
+    color: var(--text);
+    border-color: #444;
+}
+
+/* Dark Mode Override for Gray Button */
+body.dark-mode .btn-gray {
+    background: rgba(255, 255, 255, 0.25);
+    /* Significantly lighter */
+    border-color: rgba(255, 255, 255, 0.5);
+    color: #ffffff;
+    font-weight: 500;
+    /* Make text slightly bolder for contrast */
+}
+
+body.dark-mode .btn-gray:hover {
+    background: rgba(255, 255, 255, 0.35);
+    border-color: rgba(255, 255, 255, 0.6);
+    color: #ffffff;
+}
+
+/* Tutorial Specific Dark Mode Fixes */
+body.dark-mode .feature-item {
+    background: #f9f9f9;
+    color: #212121;
+    /* Force back to dark text */
+}
+
+body.dark-mode .tutorial-tip {
+    background: #fff3e0;
+    color: #e65100;
+    /* Force back to original orange text */
+    border-left-color: #ff9800;
+}
+
+/* Restore active status colors in Dark Mode */
+body.dark-mode .status-btn.s2.active {
+    background-color: var(--c-2);
+    border-color: var(--c-2);
+    color: white;
+}
+
+body.dark-mode .status-btn.s3.active {
+    background-color: var(--c-3);
+    border-color: var(--c-3);
+    color: white;
+}
+
+body.dark-mode .status-btn.s4.active {
+    background-color: var(--c-4);
+    border-color: var(--c-4);
+    color: white;
+}
+
+body.dark-mode .status-btn.s7.active {
+    background-color: var(--c-7);
+    border-color: var(--c-7);
+    color: white;
+}
+
+body.dark-mode .status-btn.s8.active {
+    background-color: var(--c-8);
+    border-color: var(--c-8);
+    color: white;
+}
+
+body.dark-mode .status-btn.sP.active {
+    background-color: var(--c-P);
+    border-color: var(--c-P);
+    color: white;
+}
+
+body.dark-mode .status-btn.sPos.active {
+    background-color: var(--c-Pos);
+    border-color: var(--c-Pos);
+    color: white;
+}
+
+body.dark-mode .status-btn.sNEB.active {
+    background-color: var(--c-NEB);
+    border-color: var(--c-NEB);
+    color: white;
+}
+
+body.dark-mode .mission-desc {
+    background-color: #4a3b32;
+    /* Darker orange/brown */
+    color: #ffd8b1;
+}
+
+body.dark-mode .mission-status-badge.Laufend {
+    background-color: #1a237e;
+    color: #90caf9;
+}
+
+body.dark-mode .mission-status-badge.Abgeschlossen {
+    background-color: #424242;
+    color: #bdbdbd;
+}
+
+body.dark-mode .panel-header {
+    background-color: #252525;
+    border-bottom-color: var(--border);
+}
+
+body.dark-mode .mission-card.done {
+    background-color: #1e1e1e;
+    /* Keep dark */
+    opacity: 0.6;
+}
+
+body.dark-mode .qual-badge {
+    background-color: #424242;
+    /* Darker grey */
+    color: #e0e0e0;
+    /* Light text */
+}
+
+body.dark-mode .squad-tag {
+    background-color: #333;
+    /* Dark background for tags in mission */
+    color: #fff;
+    border: 1px solid #555;
+    padding: 2px 5px;
+    /* Ensure padding matches standard if not already set */
+    border-radius: 4px;
+}
+
+/* Squad names in mission selection (new mission modal) */
+body.dark-mode .squad-select-btn {
+    background-color: #333;
+    color: #fff;
+    border-color: #555;
+}
+
+body.dark-mode .squad-select-btn:hover {
+    background-color: #424242;
+}
+
+body.dark-mode .squad-select-btn.selected {
+    background-color: #0d47a1;
+    /* Active dark blue */
+    border-color: #90caf9;
+}
+
+/* Ensure standard components use variables where possible */
 .mission-card {
     border: 1px solid var(--border);
     border-left: 4px solid var(--primary);
     border-radius: 4px;
     padding: 0.75rem;
     margin-bottom: 0.75rem;
-    background: white;
+    background: var(--surface);
+    /* Use variable default */
 }
 
 .mission-card.done {
@@ -578,7 +788,8 @@ main {
 }
 
 .modal-content {
-    background: white;
+    background: var(--surface);
+    color: var(--text);
     padding: 2rem;
     border-radius: 4px;
     width: 600px;

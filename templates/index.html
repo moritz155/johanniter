@@ -116,6 +116,8 @@
                         </li>
                         <li><strong>Bearbeiten:</strong> Nutzen Sie das Stift-Symbol ✎ beim Trupp, um Besatzung oder
                             Qualifikation zu ändern.</li>
+                        <li><strong>Sortieren:</strong> Verschieben Sie Trupps per Drag & Drop, um die Reihenfolge
+                            anzupassen.</li>
                     </ul>
                     <div class="tutorial-tip">
                         💡 <strong>Tipp:</strong> Sie können jederzeit neue Trupps über das <strong>+</strong> Symbol in
@@ -129,6 +131,8 @@
                     <p>Erstellen Sie neue Einsätze über <strong>+ Neuer Einsatz</strong>.</p>
                     <ul>
                         <li><strong>Zuordnung:</strong> Wählen Sie beteiligte Trupps direkt aus.</li>
+                        <li><strong>Drag & Drop:</strong> Ziehen Sie einen Trupp auf einen offenen Einsatz, um ihn
+                            direkt zuzuweisen.</li>
                         <li><strong>Live-Status:</strong> Der Status der Trupps wird im Einsatz angezeigt.</li>
                         <li><strong>Abschluss:</strong> Wenn ein Einsatz beendet ist, wählen Sie einen Ausgang (z.B.
                             "Belassen").</li>
@@ -188,6 +192,27 @@
                         <line x1="12" y1="17" x2="12.01" y2="17"></line>
                     </svg>
                 </button>
+                <button id="btn-theme-toggle" class="icon-btn header-icon-btn" onclick="toggleTheme()"
+                    title="Dark/Light Mode">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                </button>
+                <button id="btn-color-picker" class="icon-btn header-icon-btn"
+                    onclick="document.getElementById('theme-color-input').click()" title="Farbe ändern">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="13.5" cy="6.5" r=".5"></circle>
+                        <circle cx="17.5" cy="10.5" r=".5"></circle>
+                        <circle cx="8.5" cy="7.5" r=".5"></circle>
+                        <circle cx="6.5" cy="12.5" r=".5"></circle>
+                        <path
+                            d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.063 0-1.125.75-2.062 1.688-2.062H18c2.25 0 4-1.75 4-4V8c0-5.5-4.5-6-10-6z">
+                        </path>
+                    </svg>
+                </button>
+                <input type="color" id="theme-color-input" style="display:none;" onchange="setHeaderColor(this.value)">
             </div>
             <span id="shift-location" class="subtitle"></span>
         </div>
@@ -215,7 +240,7 @@
         <section class="squad-panel">
             <div class="panel-header">
                 <span>Trupp-Übersicht</span>
-                <button class="small-btn" onclick="openSquadModal()">+</button>
+                <button class="btn-gray" onclick="openSquadModal()">+ Neuer Trupp</button>
             </div>
             <div id="squad-list" class="squad-list">
                 <!-- Squads loaded here -->

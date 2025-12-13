@@ -3,7 +3,48 @@ let missionsData = [];
 let optionsData = {};
 let configData = null;
 
+// Theme Toggle Logic
+function toggleTheme() {
+    document.body.classList.toggle('dark-mode');
+    const isDark = document.body.classList.contains('dark-mode');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    updateThemeIcon(isDark);
+}
+
+function updateThemeIcon(isDark) {
+    const btn = document.getElementById('btn-theme-toggle');
+    if (!btn) return;
+    const svg = btn.querySelector('svg');
+    if (isDark) {
+        // Sun icon
+        svg.innerHTML = '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>';
+    } else {
+        // Moon icon
+        svg.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
+    }
+}
+
+// Color Customization
+function setHeaderColor(color) {
+    document.documentElement.style.setProperty('--header-bg', color);
+    localStorage.setItem('headerColor', color);
+}
+
+// Load Theme on Init
+const savedTheme = localStorage.getItem('theme');
+if (savedTheme === 'dark') {
+    document.body.classList.add('dark-mode');
+}
+
+const savedColor = localStorage.getItem('headerColor');
+if (savedColor) {
+    setHeaderColor(savedColor);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    // Initial Icon Update
+    updateThemeIcon(document.body.classList.contains('dark-mode'));
+
     loadData();
     setInterval(updateClock, 1000);
     setInterval(updateTimers, 1000);
@@ -42,6 +83,7 @@ async function loadData() {
 
 async function startShift(e) {
     e.preventDefault();
+    const locInfo = document.body.dataset.locInfo || "N/A";
     const loc = document.getElementById('conf-location').value;
     const addr = document.getElementById('conf-address').value;
     const start = document.getElementById('conf-start').value;
@@ -629,17 +671,18 @@ function editMission(mission) {
     const completeBtn = document.getElementById('btn-complete-mission');
 
     if (mission.status !== 'Abgeschlossen') {
-        outcomeGroup.style.display = 'block';
+        outcomeGroup.style.display = 'none'; // Hide initially for running missions
         completeBtn.style.display = 'inline-block';
-
-        // Set outcome value if already set
-        const outcomeSelect = document.getElementById('m-outcome');
-        if (mission.outcome) {
-            outcomeSelect.value = mission.outcome;
-        }
     } else {
-        outcomeGroup.style.display = 'none';
+        // If completed, ENABLE outcome field for editing
+        outcomeGroup.style.display = 'block';
         completeBtn.style.display = 'none';
+    }
+
+    // Always populate outcome if exists
+    if (mission.outcome) {
+        document.getElementById('m-outcome').value = mission.outcome;
+        outcomeGroup.style.display = 'block'; // Ensure visible if we have data
     }
 
     // Show Delete button for editing
