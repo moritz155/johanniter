@@ -405,13 +405,97 @@ function updateTimers() {
     });
 }
 
+let pendingNebSquadId = null;
+let nebConflictQueue = [];
+let currentNebMission = null;
+
 async function setSquadStatus(id, status) {
+    // Check for NEB and Active Missions
+    if (status === 'NEB') {
+        const squad = squadsData.find(s => s.id === id);
+        if (squad) {
+            // Find ALL active missions this squad is in
+            const activeMissions = missionsData.filter(m =>
+                m.status !== 'Abgeschlossen' && m.squad_ids.includes(id)
+            );
+
+            if (activeMissions.length > 0) {
+                pendingNebSquadId = id;
+                nebConflictQueue = [...activeMissions];
+                processNextNebConflict();
+                return; // Stop here, wait for queue processing
+            }
+        }
+    }
+
+    // Normal path
+    await performStatusUpdate(id, status);
+}
+
+function processNextNebConflict() {
+    if (nebConflictQueue.length === 0) {
+        // Queue finished -> Proceed to set NEB status
+        if (pendingNebSquadId) {
+            performStatusUpdate(pendingNebSquadId, 'NEB');
+            pendingNebSquadId = null;
+        }
+        return;
+    }
+
+    currentNebMission = nebConflictQueue.shift();
+    const squad = squadsData.find(s => s.id === pendingNebSquadId);
+    if (!squad || !currentNebMission) return;
+
+    const mNum = currentNebMission.mission_number || currentNebMission.id;
+
+    // Set Modal Text
+    document.getElementById('neb-confirm-text').innerHTML =
+        `<strong>${squad.name}</strong> ist aktuell dem Einsatz <strong>#${mNum}</strong> zugewiesen.<br>Wie möchten Sie fortfahren?`;
+
+    // Open Modal
+    document.getElementById('neb-confirm-modal').classList.add('open');
+}
+
+async function resolveNebConflict(action) {
+    if (!pendingNebSquadId || !currentNebMission) return;
+    const sId = pendingNebSquadId;
+    const mission = currentNebMission;
+
+    // Close modal first
+    closeModal('neb-confirm-modal');
+
+    if (action === 'remove') {
+        const newSquadIds = mission.squad_ids.filter(sid => sid !== sId);
+        try {
+            await fetch(`/api/missions/${mission.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ squad_ids: newSquadIds })
+            });
+        } catch (e) {
+            console.error("Error removing squad:", e);
+            alert("Fehler beim Entfernen aus dem Einsatz.");
+        }
+    }
+
+    // Proceed to next item in queue
+    // For 'keep', we just do nothing and move next.
+    // For 'cancel' (implied by closing modal without action), we should probably stop the chain?
+    // But here 'action' comes from buttons. The X button calls closeModal directly.
+    // So if X is clicked, the queue halts and status is NOT updated. This is correct behavior (Cancel).
+
+    // Wait a brief moment for UI transition? Not strictly necessary but looks better.
+    setTimeout(() => {
+        processNextNebConflict();
+    }, 200);
+}
+
+async function performStatusUpdate(id, status) {
     await fetch(`/api/squads/${id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
     });
-    // Optimistic update or reload? Reload is safer for sync
     loadData();
 }
 
@@ -532,7 +616,10 @@ function renderMissions() {
             <div class="mission-header">
                 <span class="mission-id">#${mission.mission_number || mission.id}</span>
                 <span class="mission-time">${date}</span>
-                <span class="mission-status-badge ${mission.status}">${mission.status}</span>
+                <span class="mission-status-badge ${mission.status}" 
+                      ${mission.status === 'Laufend' ? `style="cursor: pointer;" onclick='openCompleteMissionModal(${mission.id})' title="Einsatz abschließen"` : ''}>
+                    ${mission.status}
+                </span>
                 <button class="edit-btn" onclick='editMission(${JSON.stringify(mission)})'>✎</button>
             </div>
             <div class="mission-details">
@@ -553,7 +640,12 @@ function renderMissions() {
                     'PVW (Patient verweigert)': 'PVW'
                 };
                 const abbr = outcomeMap[mission.outcome] || mission.outcome;
-                return `<div><strong>Ausgang:</strong> <span style="color: #4CAF50; font-weight: 600;">${abbr}</span></div>`;
+                let display = `<div><strong>Ausgang:</strong> <span style="color: #4CAF50; font-weight: 600;">${abbr}</span></div>`;
+
+                if ((mission.outcome === 'ARM' || mission.outcome === 'ARM (Anderes Rettungsmittel)') && mission.arm_id) {
+                    display += `<div><strong>ARM:</strong> Typ: ${mission.arm_type || '?'}, Kennung: ${mission.arm_id}</div>`;
+                }
+                return display;
             })()}
             </div>
             </div>
@@ -578,7 +670,11 @@ function openNewMissionModal() {
     // Reset buttons visibility
     document.getElementById('btn-delete-mission').style.display = 'none';
     document.getElementById('btn-complete-mission').style.display = 'none';
-    document.getElementById('outcome-group').style.display = 'none';
+
+    // Always show outcome group, reset value
+    const outcomeGroup = document.getElementById('outcome-group');
+    outcomeGroup.style.display = 'none';
+    document.getElementById('m-outcome').value = "";
 
     // Inline Flex container style
     container.style.display = 'flex';
@@ -670,12 +766,12 @@ function editMission(mission) {
     const outcomeGroup = document.getElementById('outcome-group');
     const completeBtn = document.getElementById('btn-complete-mission');
 
+    // Always show outcome group
+    outcomeGroup.style.display = 'block';
+
     if (mission.status !== 'Abgeschlossen') {
-        outcomeGroup.style.display = 'none'; // Hide initially for running missions
         completeBtn.style.display = 'inline-block';
     } else {
-        // If completed, ENABLE outcome field for editing
-        outcomeGroup.style.display = 'block';
         completeBtn.style.display = 'none';
     }
 
@@ -702,15 +798,87 @@ function editMission(mission) {
         btnGroup.parentNode.insertBefore(statusDiv, btnGroup);
     }
 
-    statusDiv.innerHTML = `
-        <label>Status</label>
-        <select id="m-status">
-            <option value="Laufend" ${mission.status === 'Laufend' ? 'selected' : ''}>Laufend</option>
-            <option value="Abgeschlossen" ${mission.status === 'Abgeschlossen' ? 'selected' : ''}>Abgeschlossen</option>
-        </select>
-    `;
+    // Only show status dropdown if mission is already completed (to allow re-opening)
+    // or if we want to allow changing status manually. 
+    // User requested: "Status not selectable if mission is running".
+    // So if running, hide it (or show text only). Defaults to 'Laufend' implicitly if not sent.
+
+    statusDiv.innerHTML = '';
+    if (mission.status === 'Abgeschlossen') {
+        statusDiv.innerHTML = `
+            <label>Status</label>
+            <select id="m-status">
+                <option value="Laufend">Laufend (Wiedereröffnen)</option>
+                <option value="Abgeschlossen" selected>Abgeschlossen</option>
+            </select>
+        `;
+    } else {
+        // If running, don't show the dropdown at all. 
+        // User must use "Abschließen" button to complete.
+        // We might show a static label though?
+        // Let's just hide it as requested "nicht auswählbar".
+        statusDiv.innerHTML = '';
+    }
 
     document.getElementById('new-mission-modal').classList.add('open');
+}
+
+function openCompleteMissionModal(id) {
+    document.getElementById('complete-mission-id').value = id;
+    document.getElementById('complete-mission-outcome').value = '';
+    // Reset ARM fields
+    document.getElementById('arm-fields').style.display = 'none';
+    document.getElementById('arm-id').value = '';
+    document.getElementById('arm-type').value = '';
+    document.getElementById('complete-mission-modal').classList.add('open');
+}
+
+function toggleArmFields() {
+    const outcome = document.getElementById('complete-mission-outcome').value;
+    const armGroup = document.getElementById('arm-fields');
+    if (outcome === 'ARM' || outcome === 'ARM (Anderes Rettungsmittel)') {
+        armGroup.style.display = 'block';
+    } else {
+        armGroup.style.display = 'none';
+    }
+}
+
+async function submitCompletion() {
+    const id = document.getElementById('complete-mission-id').value;
+    const outcome = document.getElementById('complete-mission-outcome').value;
+
+    if (!outcome) {
+        alert('Bitte wählen Sie einen Ausgang aus.');
+        return;
+    }
+
+    const payload = {
+        status: 'Abgeschlossen',
+        outcome: outcome
+    };
+
+    if (outcome === 'ARM' || outcome === 'ARM (Anderes Rettungsmittel)') {
+        const armId = document.getElementById('arm-id').value;
+        const armType = document.getElementById('arm-type').value;
+
+        // Fields are optional now
+        if (armId) payload.arm_id = armId;
+        if (armType) payload.arm_type = armType;
+    }
+
+    try {
+        await fetch(`/api/missions/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        closeModal('complete-mission-modal');
+        loadData();
+    } catch (e) {
+        console.error("Completion failed:", e);
+        alert("Fehler beim Abschließen des Einsatzes.");
+    }
 }
 
 async function submitMission(e) {
@@ -728,6 +896,7 @@ async function submitMission(e) {
         reason: document.getElementById('m-reason').value,
         description: document.getElementById('m-desc').value,
         notes: document.getElementById('m-notes').value,
+        outcome: document.getElementById('m-outcome').value || null,
         squad_ids: squadIds
     };
 
@@ -737,12 +906,6 @@ async function submitMission(e) {
             // Edit
             const statusEl = document.getElementById('m-status');
             if (statusEl) payload.status = statusEl.value;
-
-            // Include outcome if provided
-            const outcomeEl = document.getElementById('m-outcome');
-            if (outcomeEl && outcomeEl.value) {
-                payload.outcome = outcomeEl.value;
-            }
 
             response = await fetch(`/api/missions/${id}`, {
                 method: 'PUT',
@@ -768,8 +931,8 @@ async function submitMission(e) {
         const statusDiv = document.getElementById('edit-status-group');
         if (statusDiv) statusDiv.remove();
 
-        // Hide outcome group
-        document.getElementById('outcome-group').style.display = 'none';
+        // Hide outcome group - NO, keep it visible for next usage or reset is handled by open
+        // document.getElementById('outcome-group').style.display = 'none';
         document.getElementById('btn-complete-mission').style.display = 'none';
 
         closeModal('new-mission-modal');

@@ -88,6 +88,8 @@ class Mission(db.Model):
     description = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), default='Laufend') # Laufend, Abgeschlossen
     outcome = db.Column(db.String(50), nullable=True) # Inter Unter, Belassen, ARM, PVW
+    arm_id = db.Column(db.String(50), nullable=True)  # Kennung if ARM
+    arm_type = db.Column(db.String(50), nullable=True) # Typ if ARM
     notes = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     session_id = db.Column(db.String(100), nullable=False)
@@ -470,6 +472,7 @@ def create_mission():
         alarming_entity=data.get('alarming_entity'),
         reason=data['reason'],
         description=data.get('description', ''),
+        outcome=data.get('outcome'),
         notes=data.get('notes', ''),
         session_id=get_session_id()
     )
@@ -502,6 +505,11 @@ def update_mission(id):
     if 'outcome' in data and data['outcome'] != mission.outcome:
         mission.outcome = data['outcome']
         changes.append(f"Ausgang: {mission.outcome}")
+        
+    if 'arm_id' in data:
+        mission.arm_id = data['arm_id']
+    if 'arm_type' in data:
+        mission.arm_type = data['arm_type']
     
     if 'squad_ids' in data:
         # Update roster

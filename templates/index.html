@@ -449,6 +449,62 @@
         </div>
     </div>
 
+    <!-- NEB Confirmation Modal -->
+    <div id="neb-confirm-modal" class="modal">
+        <div class="modal-content small" style="text-align: center;">
+            <div class="modal-header">
+                <h2>Trupp ist im Einsatz</h2>
+                <button class="close-btn" onclick="closeModal('neb-confirm-modal')">&times;</button>
+            </div>
+            <p id="neb-confirm-text">Der Trupp ist aktuell einem Einsatz zugewiesen.</p>
+            <div class="modal-footer"
+                style="justify-content: center; flex-direction: column; gap: 0.5rem; align-items: center;">
+                <button class="btn-success" style="width: 100%; padding: 0.4rem; font-size: 0.9rem;"
+                    onclick="resolveNebConflict('remove')">Aus Einsatz entfernen & NEB setzen</button>
+                <button class="btn-primary" style="width: 100%; padding: 0.4rem; font-size: 0.9rem;"
+                    onclick="resolveNebConflict('keep')">Im Einsatz behalten & NEB setzen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Complete Mission Modal -->
+    <div id="complete-mission-modal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h2>Einsatz abschließen</h2>
+                <button class="close-btn" onclick="closeModal('complete-mission-modal')">&times;</button>
+            </div>
+            <input type="hidden" id="complete-mission-id">
+            <div class="form-group">
+                <label>Ausgang des Einsatzes <span style="color:red;">*</span></label>
+                <select id="complete-mission-outcome" onchange="toggleArmFields()">
+                    <option value="">-- Bitte wählen --</option>
+                    <option value="Intervention unterblieben">Intervention unterblieben</option>
+                    <option value="Belassen">Belassen (vor Ort belassen)</option>
+                    <option value="ARM">ARM (Anderes Rettungsmittel)</option>
+                    <option value="PVW">PVW (Patient verweigert)</option>
+                </select>
+            </div>
+
+            <div id="arm-fields"
+                style="display:none; background: #f9f9f9; padding: 1rem; border-radius: 4px; margin-bottom: 1rem; border: 1px solid #eee;">
+                <div style="display: flex; gap: 1rem;">
+                    <div class="form-group" style="flex: 1;">
+                        <input type="text" id="arm-type" placeholder="Typ (z.B. RTW)">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <input type="text" id="arm-id" placeholder="Kennung (z.B. 12/83-1)">
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="justify-content: flex-end;">
+                <button class="btn-secondary" onclick="closeModal('complete-mission-modal')">Abbrechen</button>
+                <button class="btn-success" onclick="submitCompletion()">Abschließen</button>
+            </div>
+        </div>
+    </div>
+
     <div id="guide-overlay" class="guide-overlay"></div>
     <script src="{{ url_for('static', filename='script.js') }}?v={{ last_updated }}"></script>
 </body>
