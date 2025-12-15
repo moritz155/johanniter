@@ -385,6 +385,10 @@
                     <label>Qualifikation</label>
                     <input type="text" id="s-qual" placeholder="San, RS, NFS...">
                 </div>
+                <div class="form-group">
+                    <label>Dienstnummern</label>
+                    <input type="text" id="s-numbers" placeholder="z.B. 1234, 5678">
+                </div>
                 <div class="modal-footer">
                     <button type="button" id="btn-delete-squad" class="btn-danger" onclick="deleteSquad()"
                         style="display:none;">Löschen</button>
@@ -392,6 +396,32 @@
                     <button type="submit" class="btn-primary">Speichern</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Squad Removal Status Prompt Modal -->
+    <div id="remove-squad-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Trupp freigeben</h2>
+                <!-- No close button, force decision or cancel -->
+            </div>
+            <div class="modal-body">
+                <p>Folgende Trupps werden aus dem Einsatz entfernt:</p>
+                <ul id="remove-squad-list"></ul>
+                <div class="form-group">
+                    <label>Neuen Status setzen:</label>
+                    <select id="remove-squad-status">
+                        <option value="2">EB (Einsatzbereit)</option>
+                        <option value="Pause">Pause</option>
+                        <option value="NEB">NEB (Nicht Einsatzbereit)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-gray" onclick="closeModal('remove-squad-modal')">Abbrechen (Zurück)</button>
+                <button class="btn-primary" onclick="confirmSquadRemoval()">Übernehmen & Speichern</button>
+            </div>
         </div>
     </div>
 
@@ -470,9 +500,9 @@
             <p id="neb-confirm-text">Der Trupp ist aktuell einem Einsatz zugewiesen.</p>
             <div class="modal-footer"
                 style="justify-content: center; flex-direction: column; gap: 0.5rem; align-items: center;">
-                <button class="btn-success" style="width: 100%; padding: 0.4rem; font-size: 0.9rem;"
+                <button id="btn-neb-remove" class="btn-success" style="width: 100%; padding: 0.4rem; font-size: 0.9rem;"
                     onclick="resolveNebConflict('remove')">Aus Einsatz entfernen & NEB setzen</button>
-                <button class="btn-primary" style="width: 100%; padding: 0.4rem; font-size: 0.9rem;"
+                <button id="btn-neb-keep" class="btn-primary" style="width: 100%; padding: 0.4rem; font-size: 0.9rem;"
                     onclick="resolveNebConflict('keep')">Im Einsatz behalten & NEB setzen</button>
             </div>
         </div>

@@ -30,6 +30,8 @@
     /* Light Blue */
     --c-NEB: #ff5722;
     /* Deep Orange */
+    --c-Dip: #ffeb3b;
+    /* Yellow */
 }
 
 body.dark-mode {
@@ -461,6 +463,23 @@ main {
     border-color: var(--c-NEB);
 }
 
+/* sDip is always yellow when present (Action button) */
+.status-btn.sDip {
+    background: var(--c-Dip);
+    color: black;
+    /* Contrast */
+    border-color: var(--c-Dip);
+}
+
+.status-btn.sDip:hover {
+    filter: brightness(0.9);
+}
+
+.mini-status.sDip {
+    background: var(--c-Dip);
+    color: black;
+}
+
 
 /* Mission Panel */
 .mission-panel {
@@ -606,6 +625,12 @@ body.dark-mode .status-btn.sNEB.active {
     color: white;
 }
 
+body.dark-mode .status-btn.sDip {
+    background-color: var(--c-Dip);
+    border-color: var(--c-Dip);
+    color: black;
+}
+
 body.dark-mode .mission-desc {
     background-color: #4a3b32;
     /* Darker orange/brown */
@@ -682,6 +707,35 @@ body.dark-mode .squad-select-btn.selected {
     border-left-color: var(--text-secondary);
     opacity: 0.8;
     background: #fafafa;
+}
+
+/* Blinking Red Border for missions without squads */
+/* Blinking Red Border / Lamp Effect for missions without squads */
+@keyframes blink-alarm {
+    0% {
+        border-color: var(--primary);
+        box-shadow: 0 0 5px var(--primary);
+    }
+
+    50% {
+        border-color: rgba(211, 47, 47, 0.3);
+        /* Dimmer red */
+        box-shadow: none;
+    }
+
+    100% {
+        border-color: var(--primary);
+        box-shadow: 0 0 5px var(--primary);
+    }
+}
+
+.mission-card.no-squads {
+    border: 2px solid var(--primary);
+    /* Full border base */
+    border-left-width: 8px;
+    /* Maintain thick left anchor */
+    animation: blink-alarm 2.5s infinite ease-in-out;
+    /* Slower uniform pulse */
 }
 
 .mission-header {

@@ -432,9 +432,18 @@ function renderSquads() {
 
         let buttonsHtml = '';
         statuses.forEach(st => {
+            let label = st.label;
+            let className = st.class;
+
+            // Special Logic for Integriert -> EB Button becomes Dip/Disp
+            if (squad.current_status === 'Integriert' && st.code === '2') {
+                label = 'Disp'; // User requested "Disp"
+                className = 'sDip';
+            }
+
             const active = squad.current_status === st.code ? 'active' : '';
-            buttonsHtml += `<button class="status-btn ${st.class} ${active}" 
-                onclick="setSquadStatus(${squad.id}, '${st.code}')">${st.label}</button>`;
+            buttonsHtml += `<button class="status-btn ${className} ${active}" 
+                onclick="setSquadStatus(${squad.id}, '${st.code}')">${label}</button>`;
         });
 
         // Location Info
@@ -446,7 +455,12 @@ function renderSquads() {
             '7': 'Zum Abgabeort',
             '8': 'Am Abgabeort',
             'Pause': 'Pause',
-            'NEB': 'Nicht Einsatzbereit'
+            '8': 'Am Abgabeort',
+            'Pause': 'Pause',
+            'NEB': 'Nicht Einsatzbereit',
+            'Pause': 'Pause',
+            'NEB': 'Nicht Einsatzbereit',
+            'Integriert': 'Disponiert'
         };
 
         if (statusMap[squad.current_status]) {
@@ -524,26 +538,27 @@ function updateTimers() {
     });
 }
 
-let pendingNebSquadId = null;
+let pendingStatusCtx = { id: null, targetStatus: null };
 let nebConflictQueue = [];
 let currentNebMission = null;
 
 async function setSquadStatus(id, status) {
     // Check for NEB and Active Missions
-    if (status === 'NEB') {
-        const squad = squadsData.find(s => s.id === id);
-        if (squad) {
-            // Find ALL active missions this squad is in
-            const activeMissions = missionsData.filter(m =>
-                m.status !== 'Abgeschlossen' && m.squad_ids.includes(id)
-            );
+    // Check for NEB and Active Missions OR Integriert -> EB (2)
+    const squad = squadsData.find(s => s.id === id);
+    if (!squad) return;
 
-            if (activeMissions.length > 0) {
-                pendingNebSquadId = id;
-                nebConflictQueue = [...activeMissions];
-                processNextNebConflict();
-                return; // Stop here, wait for queue processing
-            }
+    if (status === 'NEB' || (status === '2' && squad.current_status === 'Integriert')) {
+        // Find ALL active missions this squad is in
+        const activeMissions = missionsData.filter(m =>
+            m.status !== 'Abgeschlossen' && m.squad_ids.includes(id)
+        );
+
+        if (activeMissions.length > 0) {
+            pendingStatusCtx = { id: id, targetStatus: status };
+            nebConflictQueue = [...activeMissions];
+            processNextNebConflict();
+            return; // Stop here, wait for queue processing
         }
     }
 
@@ -553,31 +568,57 @@ async function setSquadStatus(id, status) {
 
 function processNextNebConflict() {
     if (nebConflictQueue.length === 0) {
-        // Queue finished -> Proceed to set NEB status
-        if (pendingNebSquadId) {
-            performStatusUpdate(pendingNebSquadId, 'NEB');
-            pendingNebSquadId = null;
+        // Queue finished -> Proceed to set target status
+        if (pendingStatusCtx.id) {
+            performStatusUpdate(pendingStatusCtx.id, pendingStatusCtx.targetStatus);
+            pendingStatusCtx = { id: null, targetStatus: null };
         }
         return;
     }
 
     currentNebMission = nebConflictQueue.shift();
-    const squad = squadsData.find(s => s.id === pendingNebSquadId);
+    const squad = squadsData.find(s => s.id === pendingStatusCtx.id);
     if (!squad || !currentNebMission) return;
 
     const mNum = currentNebMission.mission_number || currentNebMission.id;
+    const target = pendingStatusCtx.targetStatus;
 
-    // Set Modal Text
-    document.getElementById('neb-confirm-text').innerHTML =
-        `<strong>${squad.name}</strong> ist aktuell dem Einsatz <strong>#${mNum}</strong> zugewiesen.<br>Wie möchten Sie fortfahren?`;
+    // Set Modal content based on Target
+    const title = document.querySelector('#neb-confirm-modal h2');
+    const text = document.getElementById('neb-confirm-text');
+    const btnRemove = document.getElementById('btn-neb-remove');
+    const btnKeep = document.getElementById('btn-neb-keep');
+
+    if (target === '2') {
+        // Disp -> EB Case
+        if (title) title.textContent = "Trupp Status zurücksetzen";
+        text.innerHTML = `<strong>${squad.name}</strong> ist aktuell disponiert (Einsatz #${mNum}).<br>Wirklich Einsatzbereit (Frei) setzen?`;
+
+        btnRemove.textContent = "Ja, EB setzen & aus Einsatz entfernen";
+        btnRemove.style.display = 'block';
+
+        // Hide "Keep" button as user wants binary choice yes/no (cancel is X)
+        // Or re-purpose keep as cancel? No, X is cancel.
+        btnKeep.style.display = 'none';
+    } else {
+        // Standard NEB Case
+        if (title) title.textContent = "Trupp ist im Einsatz";
+        text.innerHTML = `<strong>${squad.name}</strong> ist aktuell dem Einsatz <strong>#${mNum}</strong> zugewiesen.<br>Wie möchten Sie fortfahren?`;
+
+        btnRemove.textContent = "Aus Einsatz entfernen & NEB setzen";
+        btnRemove.style.display = 'block';
+
+        btnKeep.textContent = "Im Einsatz behalten & NEB setzen";
+        btnKeep.style.display = 'block';
+    }
 
     // Open Modal
     document.getElementById('neb-confirm-modal').classList.add('open');
 }
 
 async function resolveNebConflict(action) {
-    if (!pendingNebSquadId || !currentNebMission) return;
-    const sId = pendingNebSquadId;
+    if (!pendingStatusCtx.id || !currentNebMission) return;
+    const sId = pendingStatusCtx.id;
     const mission = currentNebMission;
 
     // Close modal first
@@ -634,6 +675,7 @@ function editSquad(squad) {
     document.getElementById('s-id').value = squad.id;
     document.getElementById('s-name').value = squad.name;
     document.getElementById('s-qual').value = squad.qualification;
+    document.getElementById('s-numbers').value = squad.service_numbers || '';
 
     // Set Modal State for Edit
     document.getElementById('squad-modal-title').textContent = 'Trupp bearbeiten';
@@ -647,13 +689,14 @@ async function submitSquad(e) {
     const id = document.getElementById('s-id').value;
     const name = document.getElementById('s-name').value;
     const qual = document.getElementById('s-qual').value;
+    const service_numbers = document.getElementById('s-numbers').value;
 
     if (id) {
         // Edit
         await fetch(`/api/squads/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, qualification: qual })
+            body: JSON.stringify({ name, qualification: qual, service_numbers })
         });
     } else {
         // Create
@@ -694,19 +737,58 @@ function renderMissions() {
         statsEl.textContent = `(Gesamt: ${total} | Offen: ${open})`;
     }
 
-    missionsData.forEach(mission => {
-        const card = document.createElement('div');
-        card.className = `mission-card ${mission.status === 'Abgeschlossen' ? 'done' : ''}`;
+    // Sort Missions:
+    // 1. Separate Active vs Completed
+    const activeMissions = missionsData.filter(m =>
+        m.status !== 'Abgeschlossen' &&
+        m.status !== 'Storniert' &&
+        m.status !== 'Intervention unterblieben'
+    );
+    const completedMissions = missionsData.filter(m =>
+        m.status === 'Abgeschlossen' ||
+        m.status === 'Storniert' ||
+        m.status === 'Intervention unterblieben'
+    );
 
-        // Enable Drop if active
-        if (mission.status !== 'Abgeschlossen') {
+    // 2. Sort Active:
+    // Priority 1: Has No Squads (and Open)
+    // Priority 2: Mission Number/ID Descending (Newest Top)
+    const sortedActive = [...activeMissions].sort((a, b) => {
+        const aEmpty = (!a.squad_ids || a.squad_ids.length === 0);
+        const bEmpty = (!b.squad_ids || b.squad_ids.length === 0);
+
+        if (aEmpty && !bEmpty) return -1; // a comes first
+        if (!aEmpty && bEmpty) return 1;  // b comes first
+
+        // Sort by number/id
+        const nA = parseInt(a.mission_number) || a.id;
+        const nB = parseInt(b.mission_number) || b.id;
+        return nB - nA;
+    });
+
+    // 3. Sort Completed: Just Descending by Number
+    const sortedCompleted = [...completedMissions].sort((a, b) => {
+        const nA = parseInt(a.mission_number) || a.id;
+        const nB = parseInt(b.mission_number) || b.id;
+        return nB - nA;
+    });
+
+    // Render Logic Helper
+    const renderCard = (mission) => {
+        const isDone = mission.status === 'Abgeschlossen' || mission.status === 'Storniert' || mission.status === 'Intervention unterblieben';
+        const doneClass = isDone ? 'done' : '';
+        const noSquadsClass = (!isDone && (!mission.squad_ids || mission.squad_ids.length === 0)) ? 'no-squads' : '';
+
+        const card = document.createElement('div');
+        card.className = `mission-card ${doneClass} ${noSquadsClass}`;
+
+        if (!isDone) {
             card.addEventListener('dragover', allowDrop);
             card.addEventListener('drop', (e) => handleMissionDrop(e, mission));
         }
 
         const date = new Date(mission.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        // Helper map for statuses (replicated from renderSquads or could be global)
         const statusMap = {
             '2': { label: 'EB', class: 's2' },
             '3': { label: 'zBO', class: 's3' },
@@ -715,21 +797,38 @@ function renderMissions() {
             '8': { label: 'AO', class: 's8' },
             'Pause': { label: 'Pause', class: 'sP' },
             'NEB': { label: 'NEB', class: 'sNEB' },
-            '2': { label: 'EB', class: 's2' } // Fallback to EB if unknown
+            'Integriert': { label: 'Disponiert', class: 'sDip' },
+            '1': { label: 'Frei', class: 's1' } // Fallback
         };
 
         const squadsHtml = mission.squads.map(sq => {
-            // sq is now {name, id, status}
-            // Only show status badge if mission is not completed
-            if (mission.status === 'Abgeschlossen') {
+            if (isDone) {
                 return `<span class="squad-tag">${sq.name}</span>`;
             } else {
                 const st = statusMap[sq.status] || { label: 'EB', class: 's2' };
-                return `<span class="squad-tag">
-                    ${sq.name} <span class="mini-status ${st.class}">${st.label}</span>
-                </span>`;
+                return `<span class="squad-tag">${sq.name} <span class="mini-status ${st.class}">${st.label}</span></span>`;
             }
         }).join(' ');
+
+        // Determine Outcome HTML
+        let outcomeHtml = '';
+        if (mission.outcome) {
+            const outcomeMap = {
+                'Intervention unterblieben': 'Int. Unt.',
+                'Belassen': 'Belassen',
+                'Belassen (vor Ort belassen)': 'Belassen',
+                'ARM': 'ARM',
+                'ARM (Anderes Rettungsmittel)': 'ARM',
+                'PVW': 'PVW',
+                'PVW (Patient verweigert)': 'PVW'
+            };
+            const abbr = outcomeMap[mission.outcome] || mission.outcome;
+            let outcomeText = abbr;
+            if ((mission.outcome === 'ARM' || mission.outcome === 'ARM (Anderes Rettungsmittel)') && mission.arm_id) {
+                outcomeText = `ARM / ${mission.arm_id}`;
+            }
+            outcomeHtml = `<div><strong>Ausgang:</strong> <span style="color: #4CAF50; font-weight: 600;">${outcomeText}</span></div>`;
+        }
 
         card.innerHTML = `
             <div class="mission-header">
@@ -746,40 +845,68 @@ function renderMissions() {
                 <div><strong>Grund:</strong> ${mission.reason}</div>
                 <div class="full-width"><strong>Trupps:</strong> <div style="display:inline-flex; gap:0.5rem; flex-wrap:wrap;">${squadsHtml}</div></div>
                 ${mission.alarming_entity ? `<div><strong>Alarm:</strong> ${mission.alarming_entity}</div>` : ''}
-
-                ${(() => {
-                if (!mission.outcome) return '';
-                const outcomeMap = {
-                    'Intervention unterblieben': 'Int. Unt.',
-                    'Belassen': 'Belassen',
-                    'Belassen (vor Ort belassen)': 'Belassen',
-                    'ARM': 'ARM',
-                    'ARM (Anderes Rettungsmittel)': 'ARM',
-                    'PVW': 'PVW',
-                    'PVW (Patient verweigert)': 'PVW'
-                };
-                const abbr = outcomeMap[mission.outcome] || mission.outcome;
-
-                let outcomeText = abbr;
-                if ((mission.outcome === 'ARM' || mission.outcome === 'ARM (Anderes Rettungsmittel)') && mission.arm_id) {
-                    outcomeText = `ARM / ${mission.arm_id}`;
-                }
-
-                return `<div><strong>Ausgang:</strong> <span style="color: #4CAF50; font-weight: 600;">${outcomeText}</span></div>`;
-            })()}
+                ${outcomeHtml}
+                ${mission.description ? `<div class="full-width" style="margin-top:0.5rem; white-space: pre-wrap; color:#ddd;"><em>${mission.description}</em></div>` : ''}
+                ${mission.notes ? `<div class="full-width" style="margin-top:0.5rem; font-size:0.9em; color:#bbb;">📝 ${mission.notes}</div>` : ''}
             </div>
-            </div>
-            ${mission.description ? `<div class="mission-desc">${mission.description}</div>` : ''}
-            ${mission.notes ? `<div class="mission-notes">Note: ${mission.notes}</div>` : ''}
         `;
-        container.appendChild(card);
+        return card;
+    };
+
+    // Render Active
+    sortedActive.forEach(m => {
+        container.appendChild(renderCard(m));
     });
+
+    // Render Completed (Collapsible)
+    if (sortedCompleted.length > 0) {
+        const details = document.createElement('details');
+        details.className = 'completed-missions-details';
+        details.style.marginTop = '2rem';
+        details.style.borderTop = '1px solid #444';
+
+        const summary = document.createElement('summary');
+        summary.style.padding = '1rem';
+        summary.style.cursor = 'pointer';
+        summary.style.color = '#aaa';
+        summary.textContent = `Abgeschlossene Einsätze (${sortedCompleted.length})`;
+
+        details.appendChild(summary);
+
+        const listDiv = document.createElement('div');
+        listDiv.style.marginTop = '1rem';
+
+        sortedCompleted.forEach(m => {
+            listDiv.appendChild(renderCard(m));
+        });
+
+        details.appendChild(listDiv);
+        container.appendChild(details);
+    }
 }
+
 
 function openNewMissionModal() {
     document.getElementById('new-mission-form').reset();
     document.getElementById('edit-mission-id').value = '';
     document.getElementById('mission-modal-title').innerText = "Neuer Einsatz"; // Set Title for New
+
+    // Auto-fill Mission Number (Chronological 001, 002...)
+    let nextNum = 1;
+    if (missionsData.length > 0) {
+        // Try to parse numbers from existing missions to find max
+        // Filter for numeric-ish IDs or manually entered numbers?
+        // We look at mission_number first, fallback to id if missing.
+        const numbers = missionsData.map(m => {
+            const val = m.mission_number || '';
+            const parsed = parseInt(val, 10);
+            return isNaN(parsed) ? 0 : parsed;
+        });
+        const max = Math.max(...numbers, 0);
+        nextNum = max + 1;
+    }
+    const paddedNum = String(nextNum).padStart(3, '0');
+    document.getElementById('m-number').value = paddedNum;
 
 
     // Populate Checkboxes
@@ -1021,8 +1148,14 @@ async function submitMission(e) {
     const squadIds = Array.from(document.querySelectorAll('#m-squad-select .squad-select-btn.selected'))
         .map(btn => parseInt(btn.dataset.squadId));
 
+    // Customize Mission Number: Pad to 3 digits if numeric
+    let mNum = document.getElementById('m-number').value;
+    if (mNum && !isNaN(parseInt(mNum))) {
+        mNum = String(parseInt(mNum)).padStart(3, '0');
+    }
+
     const payload = {
-        mission_number: document.getElementById('m-number').value,
+        mission_number: mNum,
         location: document.getElementById('m-location').value,
         alarming_entity: document.getElementById('m-entity').value,
         reason: document.getElementById('m-reason').value,
@@ -1039,6 +1172,50 @@ async function submitMission(e) {
         const armType = document.getElementById('m-arm-type').value;
         if (armId) payload.arm_id = armId;
         if (armType) payload.arm_type = armType;
+    }
+
+    // Check for Removed Squads (only if editing)
+    if (id) {
+        const mission = missionsData.find(m => m.id == id);
+        if (mission && mission.squad_ids) {
+            const currentIds = mission.squad_ids; // IDs currently in backend
+            const newIds = payload.squad_ids;
+
+            // Find IDs that are in current but NOT in new
+            const removedIds = currentIds.filter(sid => !newIds.includes(sid));
+
+            // Filter out squads that are assigned to OTHER active missions
+            // If they are in another active mission, we should not change their status (or prompt for it)
+            const reallyRemovedIds = removedIds.filter(sid => {
+                const inOtherMission = missionsData.some(m =>
+                    m.id != id &&
+                    m.status !== 'Abgeschlossen' &&
+                    m.squad_ids &&
+                    m.squad_ids.includes(sid)
+                );
+                return !inOtherMission;
+            });
+
+            if (reallyRemovedIds.length > 0) {
+                // Intercept!
+                pendingMissionPayload = payload;
+                pendingMissionId = id;
+                pendingRemovedSquadIds = reallyRemovedIds;
+
+                // Show Prompt
+                const listEl = document.getElementById('remove-squad-list');
+                listEl.innerHTML = '';
+                reallyRemovedIds.forEach(sid => {
+                    const squad = squadsData.find(s => s.id === sid);
+                    const li = document.createElement('li');
+                    li.textContent = squad ? squad.name : `Trupp #${sid}`;
+                    listEl.appendChild(li);
+                });
+
+                document.getElementById('remove-squad-modal').classList.add('open');
+                return; // STOP Here
+            }
+        }
     }
 
     try {
@@ -1082,6 +1259,53 @@ async function submitMission(e) {
     } catch (error) {
         console.error('Error submitting mission:', error);
         alert('Fehler beim Speichern: ' + error.message);
+    }
+}
+
+let pendingMissionPayload = null;
+let pendingMissionId = null;
+let pendingRemovedSquadIds = [];
+
+async function confirmSquadRemoval() {
+    const status = document.getElementById('remove-squad-status').value;
+
+    // 1. Update Status for all removed squads
+    for (const sid of pendingRemovedSquadIds) {
+        try {
+            await fetch(`/api/squads/${sid}/status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: status })
+            });
+        } catch (e) {
+            console.error(`Failed to set status for squad ${sid}`, e);
+        }
+    }
+
+    // 2. Submit the Mission Update (remove them from mission)
+    try {
+        let response = await fetch(`/api/missions/${pendingMissionId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(pendingMissionPayload)
+        });
+
+        if (response.ok) {
+            closeModal('remove-squad-modal');
+            closeModal('new-mission-modal');
+            loadData();
+
+            // Reset
+            pendingMissionPayload = null;
+            pendingMissionId = null;
+            pendingRemovedSquadIds = [];
+        } else {
+            const err = await response.json();
+            alert('Fehler beim Speichern des Einsatzes: ' + (err.error || 'Unbekannt'));
+        }
+    } catch (e) {
+        console.error("Save failed:", e);
+        alert("Fehler beim Speichern.");
     }
 }
 

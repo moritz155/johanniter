@@ -45,6 +45,7 @@ class Squad(db.Model):
     qualification = db.Column(db.String(20), default='San') # San, RS, NFS, NA
     current_status = db.Column(db.String(20), default='2') # 2 (EB), 3, 4, 7, 8
     position = db.Column(db.Integer, default=0)
+    service_numbers = db.Column(db.String(200), nullable=True) # Comma-seperated list
     session_id = db.Column(db.String(100), nullable=False)
 
     __table_args__ = (db.UniqueConstraint('name', 'session_id', name='_name_session_uc'),)
@@ -73,6 +74,7 @@ class Squad(db.Model):
             'id': self.id,
             'name': self.name,
             'qualification': self.qualification,
+            'service_numbers': self.service_numbers,
             'current_status': self.current_status,
             'position': self.position,
             'last_status_change': (self.last_status_change.isoformat() + 'Z') if self.last_status_change else None,
@@ -154,7 +156,8 @@ STATUS_MAP = {
     '8': 'AO',
     'Pause': 'Pause',
     'NEB': 'NEB',
-    '1': 'Frei'
+    '1': 'Frei',
+    'Integriert': 'Disponiert'
 }
 
 def get_session_id():
@@ -369,10 +372,16 @@ def create_squad():
     if Squad.query.filter_by(name=data['name'], session_id=sid).first():
         return jsonify({'error': 'Squad exists'}), 400
     
-    squad = Squad(name=data['name'], qualification=data.get('qualification', 'San'), session_id=sid)
+    squad = Squad(
+        name=data['name'], 
+        qualification=data.get('qualification', 'San'), 
+        service_numbers=data.get('service_numbers'),
+        session_id=sid
+    )
     db.session.add(squad)
     db.session.commit()
-    log_action('TRUPP NEU', f"{squad.name} ({squad.qualification})", squad_id=squad.id)
+    dn_text = f", DN: {squad.service_numbers}" if squad.service_numbers else ""
+    log_action('TRUPP NEU', f"{squad.name} ({squad.qualification}){dn_text} erstellt", squad_id=squad.id)
     return jsonify(squad.to_dict()), 201
 
 @app.route('/api/squads/<int:id>', methods=['PUT'])
@@ -383,16 +392,22 @@ def update_squad(id):
     
     changes = []
     if 'name' in data and data['name'] != squad.name:
-        changes.append(f"Name: {squad.name} -> {data['name']}")
+        changes.append(f"Name von '{squad.name}' auf '{data['name']}' geändert")
         squad.name = data['name']
         
     if 'qualification' in data and data['qualification'] != squad.qualification:
-        changes.append(f"Qual: {squad.qualification} -> {data['qualification']}")
+        changes.append(f"Qualifikation von '{squad.qualification}' auf '{data['qualification']}' geändert")
         squad.qualification = data.get('qualification')
+
+    if 'service_numbers' in data and data['service_numbers'] != squad.service_numbers:
+        old_val = squad.service_numbers or "keine"
+        new_val = data.get('service_numbers') or "keine"
+        changes.append(f"Dienstnummern von '{old_val}' auf '{new_val}' geändert")
+        squad.service_numbers = data.get('service_numbers')
 
     if changes:
         db.session.commit()
-        log_action('TRUPP UPDATE', f"{squad.name} bearbeitet: {', '.join(changes)}", squad_id=squad.id)
+        log_action('TRUPP UPDATE', f"{squad.name} bearbeitet: {'; '.join(changes)}", squad_id=squad.id)
         
     return jsonify(squad.to_dict())
 
@@ -485,6 +500,14 @@ def create_mission():
             squad = Squad.query.get(sid)
             if squad:
                 new_mission.squads.append(squad)
+                # Auto-set status to Integriert (Alarmiert)
+                if squad.current_status != 'Integriert':
+                    squad.current_status = 'Integriert'
+                    squad.last_status_change = datetime.utcnow()
+                    # Log status change implicitly? Or explicitly? 
+                    # Let's log it explicitly as a system action
+                    log_action('STATUS', f"{squad.name}: {STATUS_MAP.get('Integriert', 'Integriert')}", 
+                               squad_id=squad.id, mission_id=None) # Mission ID not yet committed, but that's fine for now, or we commit first.
     
     db.session.add(new_mission)
     db.session.commit()
@@ -501,36 +524,32 @@ def update_mission(id):
     changes = []
     
     if 'status' in data and data['status'] != mission.status:
-        changes.append(f"Status: {mission.status} -> {data['status']}")
+        changes.append(f"Status von '{mission.status}' auf '{data['status']}' geändert")
         mission.status = data['status']
     
     if 'outcome' in data and data['outcome'] != mission.outcome:
+        old_val = mission.outcome or ""
+        new_val = data['outcome'] or ""
         mission.outcome = data['outcome']
         
         # Check if ARM details are provided in this request OR already exist
         current_arm_id = data.get('arm_id', mission.arm_id)
         
         if (mission.outcome == 'ARM' or mission.outcome == 'ARM (Anderes Rettungsmittel)') and current_arm_id:
-             changes.append(f"Ausgang: ARM / {current_arm_id}")
+             changes.append(f"Ausgang auf ARM gesetzt (Kennung: {current_arm_id})")
         else:
-             changes.append(f"Ausgang: {mission.outcome}")
+             changes.append(f"Ausgang von '{old_val}' auf '{new_val}' geändert")
         
     if 'arm_id' in data and data['arm_id'] != mission.arm_id:
-        # Only log if specifically changed (and not just set during initial ARM outcome setting if that was already logged above)
-        # However, the block above only logs "Ausgang: ...". 
-        # If outcome didn't change (e.g. already ARM), we need to log this.
-        # If outcome DID change, we logged "ARM / new_id". 
-        # So we should check if we already logged outcome change to avoid duplicate "ARM / ..." logs if possible,
-        # OR just log "Kennung geändert: ..."
-        
-        if 'outcome' not in data or data['outcome'] == mission.outcome:
-             changes.append(f"ARM Kennung: {mission.arm_id or ''} -> {data['arm_id']}")
-        
+        old_val = mission.arm_id or ""
+        new_val = data['arm_id'] or ""
+        changes.append(f"ARM Kennung von '{old_val}' auf '{new_val}' geändert")
         mission.arm_id = data['arm_id']
 
     if 'arm_type' in data and data['arm_type'] != mission.arm_type:
-        if 'outcome' not in data or data['outcome'] == mission.outcome:
-            changes.append(f"ARM Typ: {mission.arm_type or ''} -> {data['arm_type']}")
+        old_val = mission.arm_type or ""
+        new_val = data['arm_type'] or ""
+        changes.append(f"ARM Typ von '{old_val}' auf '{new_val}' geändert")
         mission.arm_type = data['arm_type']
     
     if 'squad_ids' in data:
@@ -538,34 +557,66 @@ def update_mission(id):
         current_ids = {s.id for s in mission.squads}
         new_ids = set(data['squad_ids'])
         if current_ids != new_ids:
-            changes.append("Trupps aktualisiert")
+            # Calculate diff
+            added_ids = new_ids - current_ids
+            removed_ids = current_ids - new_ids
+            
+            added_names = [Squad.query.get(sid).name for sid in added_ids]
+            removed_names = [Squad.query.get(sid).name for sid in removed_ids]
+            
+            diff_parts = []
+            if added_names:
+                diff_parts.append(f"{', '.join(added_names)} hinzugefügt")
+            if removed_names:
+                diff_parts.append(f"{', '.join(removed_names)} entfernt")
+            
+            changes.append(f"Trupps aktualisiert: {'; '.join(diff_parts)}")
+
             mission.squads = []
             for sid in new_ids:
                 s = Squad.query.get(sid)
                 if s: 
                     mission.squads.append(s)
+                    
+                    # Logic: If squad was NOT in current_ids (i.e., newly added), set to Integriert
+                    if sid not in current_ids and s.current_status != 'Integriert':
+                        s.current_status = 'Integriert'
+                        s.last_status_change = datetime.utcnow()
+                        log_action('STATUS', f"{s.name}: Status auf {STATUS_MAP.get('Integriert', 'Integriert')} gesetzt", 
+                                   squad_id=s.id, mission_id=mission.id)
 
     # Handle description separately to include content in log
     if 'description' in data and mission.description != data['description']:
+        old_val = mission.description or "(leer)"
+        new_val = data['description'] or "(leer)"
+        changes.append(f"Lage aktualisiert: '{old_val}' -> '{new_val}'")
         mission.description = data['description']
-        desc_text = mission.description if mission.description else "(leer)"
-        changes.append(f"Lagebeschreibung: {desc_text}")
 
     # Handle other fields
-    fields = ['location', 'reason', 'mission_number', 'alarming_entity']
-    for f in fields:
+    field_map = {
+        'location': 'Ort',
+        'reason': 'Stichwort',
+        'mission_number': 'Nr.',
+        'alarming_entity': 'Alarmierung'
+    }
+    
+    for f, label in field_map.items():
         if f in data and getattr(mission, f) != data[f]:
-            changes.append(f"{f.capitalize()} geändert")
+            old_val = getattr(mission, f) or "(leer)"
+            new_val = data[f] or "(leer)"
+            changes.append(f"{label} von '{old_val}' auf '{new_val}' geändert")
             setattr(mission, f, data[f])
             
     if 'notes' in data and mission.notes != data['notes']:
+        old_val = mission.notes or "(leer)"
+        new_val = data['notes'] or "(leer)"
+        changes.append(f"Notiz geändert: '{old_val}' -> '{new_val}'")
         mission.notes = data['notes']
-        # Limit length if very long? 
-        changes.append(f"Notiz: {mission.notes}")
 
     if changes:
         db.session.commit()
-        log_action('EINSATZ UPDATE', ", ".join(changes), mission_id=mission.id)
+        m_num = mission.mission_number or mission.id
+        log_action('EINSATZ UPDATE', f"[Einsatz #{m_num}] {'; '.join(changes)}", mission_id=mission.id)
 
     return jsonify(mission.to_dict())
 
@@ -646,8 +697,10 @@ def generate_export_file(config):
         
         output.write(f"Ort: {m.location}\n")
         output.write(f"Grund: {m.reason}\n")
-        output.write(f"Alarmierung: {m.alarming_entity}\n")
+        val_entity = m.alarming_entity or "-"
+        output.write(f"Alarmierung: {val_entity}\n")
         output.write(f"Beteiligte Trupps: {', '.join([s.name for s in m.squads])}\n")
+        
         if m.description:
             output.write(f"Lage: {m.description}\n")
         if m.notes:
@@ -658,7 +711,9 @@ def generate_export_file(config):
         if m_logs:
             output.write("  Verlauf:\n")
             for l in m_logs:
-                output.write(f"  - [{l.timestamp.strftime('%H:%M:%S')}] {l.action}: {l.details}\n")
+                # Clean up log details "None"
+                safe_details = l.details.replace("None", "(leer)") if l.details else ""
+                output.write(f"  - [{l.timestamp.strftime('%H:%M:%S')}] {l.action}: {safe_details}\n")
         
         output.write("-" * 40 + "\n\n")
 
@@ -669,7 +724,8 @@ def generate_export_file(config):
         # Count missions for this squad
         mission_count = len([m for m in s.missions])
         
-        output.write(f"Trupp: {s.name} ({s.qualification}) - {mission_count} Einsätze\n")
+        sn_text = f" [DN: {s.service_numbers}]" if s.service_numbers else ""
+        output.write(f"Trupp: {s.name} ({s.qualification}){sn_text} - {mission_count} Einsätze\n")
         s_logs = LogEntry.query.filter_by(squad_id=s.id).order_by(LogEntry.timestamp).all()
         
         # Track pause periods (start and end times)
@@ -677,6 +733,7 @@ def generate_export_file(config):
         pause_start = None
         
         for l in s_logs:
+            safe_details = l.details.replace("None", "(leer)") if l.details else ""
             if l.action == 'STATUS':
                 # Add mission context if available
                 mission_context = ""
@@ -686,7 +743,7 @@ def generate_export_file(config):
                         mission_num = mission.mission_number or mission.id
                         mission_context = f" (Einsatz #{mission_num})"
                 
-                output.write(f"  [{l.timestamp.strftime('%H:%M:%S')}] {l.details}{mission_context}\n")
+                output.write(f"  [{l.timestamp.strftime('%H:%M:%S')}] {safe_details}{mission_context}\n")
                 
                 # Check if status changed to Pause
                 if '-> Pause' in l.details:
@@ -710,7 +767,8 @@ def generate_export_file(config):
     output.write("=== GESAMTES LOGBUCH ===\n")
     all_logs = LogEntry.query.filter_by(session_id=sid).order_by(LogEntry.timestamp).all()
     for l in all_logs:
-        output.write(f"[{l.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] [{l.action}] {l.details}\n")
+        safe_details = l.details.replace("None", "(leer)") if l.details else ""
+        output.write(f"[{l.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] [{l.action}] {safe_details}\n")
         
     output.write("\n")
 
@@ -721,7 +779,8 @@ def generate_export_file(config):
         for m in deleted_missions:
             m_num = m.mission_number or m.id
             output.write(f"Einsatz #{m_num} ({m.location})\n")
-            output.write(f"  Grund für Löschung: {m.deletion_reason}\n")
+            val_reason = m.deletion_reason or "-"
+            output.write(f"  Grund für Löschung: {val_reason}\n")
             output.write(f"  Urspr. Alarmierung: {m.reason}\n")
             if m.description:
                 output.write(f"  Lage: {m.description}\n")
@@ -731,7 +790,8 @@ def generate_export_file(config):
             if m_logs:
                 output.write("  Verlauf vor Löschung:\n")
                 for l in m_logs:
-                     output.write(f"  - [{l.timestamp.strftime('%H:%M:%S')}] {l.action}: {l.details}\n")
+                     safe_details = l.details.replace("None", "(leer)") if l.details else ""
+                     output.write(f"  - [{l.timestamp.strftime('%H:%M:%S')}] {l.action}: {safe_details}\n")
             output.write("\n")
 
     # Convert to bytes
