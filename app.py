@@ -113,6 +113,8 @@ class Mission(db.Model):
             'description': self.description,
             'status': self.status,
             'outcome': self.outcome,
+            'arm_id': self.arm_id,
+            'arm_type': self.arm_type,
             'notes': self.notes,
             'created_at': (self.created_at.isoformat() + 'Z') if self.created_at else None
         }
@@ -504,11 +506,31 @@ def update_mission(id):
     
     if 'outcome' in data and data['outcome'] != mission.outcome:
         mission.outcome = data['outcome']
-        changes.append(f"Ausgang: {mission.outcome}")
         
-    if 'arm_id' in data:
+        # Check if ARM details are provided in this request OR already exist
+        current_arm_id = data.get('arm_id', mission.arm_id)
+        
+        if (mission.outcome == 'ARM' or mission.outcome == 'ARM (Anderes Rettungsmittel)') and current_arm_id:
+             changes.append(f"Ausgang: ARM / {current_arm_id}")
+        else:
+             changes.append(f"Ausgang: {mission.outcome}")
+        
+    if 'arm_id' in data and data['arm_id'] != mission.arm_id:
+        # Only log if specifically changed (and not just set during initial ARM outcome setting if that was already logged above)
+        # However, the block above only logs "Ausgang: ...". 
+        # If outcome didn't change (e.g. already ARM), we need to log this.
+        # If outcome DID change, we logged "ARM / new_id". 
+        # So we should check if we already logged outcome change to avoid duplicate "ARM / ..." logs if possible,
+        # OR just log "Kennung geändert: ..."
+        
+        if 'outcome' not in data or data['outcome'] == mission.outcome:
+             changes.append(f"ARM Kennung: {mission.arm_id or ''} -> {data['arm_id']}")
+        
         mission.arm_id = data['arm_id']
-    if 'arm_type' in data:
+
+    if 'arm_type' in data and data['arm_type'] != mission.arm_type:
+        if 'outcome' not in data or data['outcome'] == mission.outcome:
+            changes.append(f"ARM Typ: {mission.arm_type or ''} -> {data['arm_type']}")
         mission.arm_type = data['arm_type']
     
     if 'squad_ids' in data:
@@ -613,7 +635,12 @@ def generate_export_file(config):
                 end_time = completion_log.timestamp.strftime('%d.%m.%Y %H:%M:%S')
             else:
                 end_time = 'Abgeschlossen'
-            output.write(f"Zeit: {start_time} - {end_time}\n")
+            
+            outcome_display = m.outcome
+            if (m.outcome == 'ARM' or m.outcome == 'ARM (Anderes Rettungsmittel)') and m.arm_id:
+                outcome_display = f"ARM / {m.arm_id}"
+                
+            output.write(f"Zeit: {start_time} - {end_time} ({outcome_display})\n")
         else:
             output.write(f"Zeit: {start_time} - Laufend\n")
         

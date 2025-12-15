@@ -46,6 +46,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateThemeIcon(document.body.classList.contains('dark-mode'));
 
     loadData();
+    fetchWeather(); // Fetch once on load
+    setInterval(fetchWeather, 600000); // Refresh every 10 mins
     setInterval(updateClock, 1000);
     setInterval(updateTimers, 1000);
 });
@@ -289,6 +291,123 @@ function updateClock() {
     document.getElementById('clock').textContent = now.toLocaleTimeString();
     document.getElementById('date').textContent = now.toLocaleDateString();
 }
+
+async function fetchWeather() {
+    const debugEl = document.getElementById('weather-debug');
+    const widget = document.getElementById('weather-widget');
+
+    // Unhide immediately so we can see "Start..."
+    if (widget) widget.classList.remove('hidden');
+    if (debugEl) debugEl.textContent = "Start...";
+
+    // Default to Berlin (Johanniter HQ area approx)
+    let lat = 52.52;
+    let lon = 13.41;
+
+    // Try to get actual location
+    if (navigator.geolocation) {
+        if (debugEl) debugEl.textContent = "Locating...";
+        try {
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+            });
+            lat = position.coords.latitude;
+            lon = position.coords.longitude;
+            if (debugEl) debugEl.textContent = "Loc: OK";
+        } catch (e) {
+            console.log("Geolocation denied or error, using default.");
+            if (debugEl) debugEl.textContent = "Loc: Fail/Def";
+        }
+    }
+
+    try {
+        if (debugEl) debugEl.textContent += " Fetching...";
+        // api.open-meteo.com is free and needs no key
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto&_=${new Date().getTime()}`;
+        console.log(`Fetching weather from: ${url}`);
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+
+        if (data.current_weather) {
+            const temp = Math.round(data.current_weather.temperature);
+            const code = data.current_weather.weathercode;
+            const isDay = data.current_weather.is_day; // 1 = Day, 0 = Night
+            console.log(`Weather: ${temp}°C, Code: ${code}, isDay: ${isDay}`);
+
+            // Map codes to icons
+            let icon = '❓';
+
+            // Function to choose day/night icon
+            const getIcon = (d, n) => isDay === 1 ? d : n;
+
+            if (code === 0) icon = getIcon('☀️', '🌙'); // Clear sky
+            else if (code === 1) icon = getIcon('🌤️', '🌙'); // Mainly clear
+            else if (code === 2) icon = getIcon('⛅', '🌙'); // Partly cloudy (Moon preferred at night)
+            else if (code === 3) icon = '☁️'; // Overcast
+            else if (code === 45 || code === 48) icon = '🌫️'; // Fog
+            else if (code >= 51 && code <= 67) icon = '🌧️'; // Drizzle / Rain
+            else if (code >= 71 && code <= 77) icon = '🌨️'; // Snow
+            else if (code >= 80 && code <= 82) icon = '🌦️'; // Rain showers
+            else if (code >= 85 && code <= 86) icon = '❄️'; // Snow showers
+            else if (code >= 95) icon = '⛈️'; // Thunderstorm
+
+            const widget = document.getElementById('weather-widget');
+            const iconEl = document.getElementById('weather-icon');
+            const tempEl = document.getElementById('weather-temp');
+
+            if (widget && iconEl && tempEl) {
+                iconEl.textContent = icon;
+                tempEl.textContent = `${temp}°C`;
+
+                // Visible Debug Info
+                if (debugEl) {
+                    debugEl.textContent = `[C:${code} D:${isDay}]`;
+                    debugEl.style.color = isDay === 1 ? 'yellow' : 'cyan';
+                }
+
+                // Tooltip
+                widget.title = `Code: ${code}, Day: ${isDay} (1=Day, 0=Night). Click for details.`;
+                widget.classList.remove('hidden');
+
+                // Update global coords for click handler
+                window.weatherLat = lat;
+                window.weatherLon = lon;
+
+                console.log(`Weather Updated: ${icon} ${temp}°C (Code: ${code}, Day: ${isDay})`);
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching weather:', error);
+        if (debugEl) debugEl.textContent = `Err: ${error.message}`;
+    }
+}
+
+// Global click handler (attached once)
+document.addEventListener('DOMContentLoaded', () => {
+    // Refresh Button
+    const refreshBtn = document.getElementById('refresh-weather');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent widget click
+            fetchWeather();
+        });
+    }
+
+    // Widget Click (Link)
+    const widget = document.getElementById('weather-widget');
+    if (widget) {
+        widget.addEventListener('click', () => {
+            const lat = window.weatherLat || 52.52;
+            const lon = window.weatherLon || 13.41;
+            // Meteoblue URL with specific coordinates
+            const weatherUrl = `https://www.meteoblue.com/en/weather/week/index?lat=${lat}&lon=${lon}`;
+            window.open(weatherUrl, '_blank');
+        });
+    }
+});
 
 // --- Squads ---
 
@@ -640,12 +759,13 @@ function renderMissions() {
                     'PVW (Patient verweigert)': 'PVW'
                 };
                 const abbr = outcomeMap[mission.outcome] || mission.outcome;
-                let display = `<div><strong>Ausgang:</strong> <span style="color: #4CAF50; font-weight: 600;">${abbr}</span></div>`;
 
+                let outcomeText = abbr;
                 if ((mission.outcome === 'ARM' || mission.outcome === 'ARM (Anderes Rettungsmittel)') && mission.arm_id) {
-                    display += `<div><strong>ARM:</strong> Typ: ${mission.arm_type || '?'}, Kennung: ${mission.arm_id}</div>`;
+                    outcomeText = `ARM / ${mission.arm_id}`;
                 }
-                return display;
+
+                return `<div><strong>Ausgang:</strong> <span style="color: #4CAF50; font-weight: 600;">${outcomeText}</span></div>`;
             })()}
             </div>
             </div>
@@ -775,11 +895,13 @@ function editMission(mission) {
         completeBtn.style.display = 'none';
     }
 
-    // Always populate outcome if exists
-    if (mission.outcome) {
-        document.getElementById('m-outcome').value = mission.outcome;
-        outcomeGroup.style.display = 'block'; // Ensure visible if we have data
-    }
+    // Set outcome value and trigger toggle
+    document.getElementById('m-outcome').value = mission.outcome || '';
+    toggleEditArmFields(); // Use existing toggleArmFields function
+
+    // Populate ARM values if present
+    if (mission.arm_id) document.getElementById('m-arm-id').value = mission.arm_id;
+    if (mission.arm_type) document.getElementById('m-arm-type').value = mission.arm_type;
 
     // Show Delete button for editing
     document.getElementById('btn-delete-mission').style.display = 'inline-block';
@@ -821,6 +943,16 @@ function editMission(mission) {
     }
 
     document.getElementById('new-mission-modal').classList.add('open');
+}
+
+function toggleEditArmFields() {
+    const outcome = document.getElementById('m-outcome').value;
+    const armGroup = document.getElementById('m-arm-fields');
+    if (outcome === 'ARM' || outcome === 'ARM (Anderes Rettungsmittel)') {
+        armGroup.style.display = 'block';
+    } else {
+        armGroup.style.display = 'none';
+    }
 }
 
 function openCompleteMissionModal(id) {
@@ -900,6 +1032,15 @@ async function submitMission(e) {
         squad_ids: squadIds
     };
 
+    // Add ARM fields if outcome matches
+    const outcomeVal = payload.outcome;
+    if (outcomeVal === 'ARM' || outcomeVal === 'ARM (Anderes Rettungsmittel)') {
+        const armId = document.getElementById('m-arm-id').value;
+        const armType = document.getElementById('m-arm-type').value;
+        if (armId) payload.arm_id = armId;
+        if (armType) payload.arm_type = armType;
+    }
+
     try {
         let response;
         if (id) {
@@ -970,6 +1111,13 @@ async function completeMission() {
         status: 'Abgeschlossen',
         outcome: outcomeEl.value
     };
+
+    if (outcomeEl.value === 'ARM' || outcomeEl.value === 'ARM (Anderes Rettungsmittel)') {
+        const armId = document.getElementById('m-arm-id').value;
+        const armType = document.getElementById('m-arm-type').value;
+        if (armId) payload.arm_id = armId;
+        if (armType) payload.arm_type = armType;
+    }
 
     await fetch(`/api/missions/${id}`, {
         method: 'PUT',

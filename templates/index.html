@@ -13,22 +13,21 @@
     <div id="welcome-screen" class="welcome-screen">
         <div class="welcome-left">
             <div class="welcome-content">
+                <p class="welcome-copywrite">Ein Projekt von Noah Elvis Oberkofler und Moritz Schelten</p>
                 <h1>Johanniter<br>Mission Control</h1>
                 <p class="welcome-subtitle">Einsatzleitung & Protokollierung</p>
 
                 <div class="welcome-actions">
                     <button class="btn-welcome-primary" onclick="openShiftSetup()">
-                        <span class="btn-icon">➕</span>
+
                         Neuer Dienst
                     </button>
                     <button class="btn-welcome-secondary" onclick="openTutorial()">
-                        <span class="btn-icon">📖</span>
+
                         Tutorial
                     </button>
                 </div>
-                <div class="welcome-copyright">
-                    <small>Projekt von Noah Elvis Oberkofler und Moritz Schelten<br>Proof of Concept</small>
-                </div>
+
             </div>
         </div>
         <div class="welcome-right">
@@ -319,13 +318,25 @@
 
                 <div class="form-group" id="outcome-group" style="display:none;">
                     <label>Ausgang des Einsatzes <span style="color:red;">*</span></label>
-                    <select id="m-outcome">
+                    <select id="m-outcome" onchange="toggleEditArmFields()">
                         <option value="">-- Bitte wählen --</option>
                         <option value="Intervention unterblieben">Intervention unterblieben</option>
                         <option value="Belassen">Belassen (vor Ort belassen)</option>
                         <option value="ARM">ARM (Anderes Rettungsmittel)</option>
                         <option value="PVW">PVW (Patient verweigert)</option>
                     </select>
+
+                    <div id="m-arm-fields"
+                        style="display:none; background: #f9f9f9; padding: 1rem; border-radius: 4px; margin-top: 1rem; border: 1px solid #eee;">
+                        <div style="display: flex; gap: 1rem;">
+                            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                                <input type="text" id="m-arm-type" placeholder="Typ (z.B. RTW)">
+                            </div>
+                            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                                <input type="text" id="m-arm-id" placeholder="Kennung (z.B. 12/83-1)">
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="modal-footer">
@@ -499,14 +510,102 @@
             </div>
 
             <div class="modal-footer" style="justify-content: flex-end;">
-                <button class="btn-secondary" onclick="closeModal('complete-mission-modal')">Abbrechen</button>
+                <!-- Cancel Removed -->
                 <button class="btn-success" onclick="submitCompletion()">Abschließen</button>
             </div>
         </div>
     </div>
 
     <div id="guide-overlay" class="guide-overlay"></div>
-    <script src="{{ url_for('static', filename='script.js') }}?v={{ last_updated }}"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=FORCE_RELOAD_999"></script>
+    <script>
+        // Inline Weather Script for maximum reliability
+
+        // Global Coords
+        window.weatherLat = 52.52;
+        window.weatherLon = 13.41;
+
+        async function fetchWeather() {
+            const widget = document.getElementById('weather-widget');
+
+            // Unhide
+            if (widget) widget.classList.remove('hidden');
+
+            let lat = window.weatherLat;
+            let lon = window.weatherLon;
+
+            // Geolocation
+            if (navigator.geolocation) {
+                try {
+                    const position = await new Promise((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+                    });
+                    lat = position.coords.latitude;
+                    lon = position.coords.longitude;
+
+                    // Update global
+                    window.weatherLat = lat;
+                    window.weatherLon = lon;
+                } catch (e) {
+                    console.log("Geo error:", e);
+                }
+            }
+
+            // Fetch
+            try {
+                // Add timestamp to prevent caching
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto&_=${new Date().getTime()}`;
+
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("HTTP " + response.status);
+
+                const data = await response.json();
+
+                if (data.current_weather) {
+                    const temp = Math.round(data.current_weather.temperature);
+                    const code = data.current_weather.weathercode;
+                    const isDay = data.current_weather.is_day; // 1=Day, 0=Night
+
+                    let icon = '❓';
+                    const getIcon = (d, n) => isDay === 1 ? d : n;
+
+                    if (code === 0) icon = getIcon('☀️', '🌙');
+                    else if (code === 1) icon = getIcon('🌤️', '🌙');
+                    else if (code === 2) icon = getIcon('⛅', '🌙'); // Partly cloudy (Moon)
+                    else if (code === 3) icon = '☁️';
+                    else if (code === 45 || code === 48) icon = '🌫️';
+                    else if (code >= 51 && code <= 67) icon = '🌧️';
+                    else if (code >= 71 && code <= 77) icon = '🌨️';
+                    else if (code >= 80 && code <= 82) icon = '🌦️';
+                    else if (code >= 85 && code <= 86) icon = '❄️';
+                    else if (code >= 95) icon = '⛈️';
+
+                    const iconEl = document.getElementById('weather-icon');
+                    const tempEl = document.getElementById('weather-temp');
+
+                    if (iconEl) iconEl.textContent = icon;
+                    if (tempEl) tempEl.textContent = temp + "°C";
+
+                    console.log(`Weather: ${icon} ${temp}C`);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchWeather();
+
+            // Meteoblue Link
+            const widget = document.getElementById('weather-widget');
+            if (widget) {
+                widget.onclick = () => {
+                    const url = `https://www.meteoblue.com/en/weather/week/index?lat=${window.weatherLat}&lon=${window.weatherLon}`;
+                    window.open(url, '_blank');
+                };
+            }
+        });
+    </script>
 </body>
 
 </html>
