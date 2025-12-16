@@ -6,6 +6,15 @@ import io
 import csv
 import os
 import uuid
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import io
 
 app = Flask(__name__)
 app.secret_key = 'dev-secret-key-change-in-prod' # Necessary for session
@@ -854,10 +863,304 @@ def end_shift():
     if not config:
          config = ShiftConfig.query.filter_by(session_id=sid).order_by(ShiftConfig.id.desc()).first()
          
-    mem = generate_export_file(config)
-    filename = f"abschluss_{datetime.now().strftime('%Y%m%d_%H%M')}.txt"
-    return send_file(mem, as_attachment=True, download_name=filename, mimetype='text/plain')
+    mem = generate_pdf_file(config)
+    filename = f"abschluss_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    return send_file(mem, as_attachment=True, download_name=filename, mimetype='application/pdf')
 
+
+
+def generate_pdf_file(config):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+    styles = getSampleStyleSheet()
+    story = []
+    sid = config.session_id if config else get_session_id()
+    
+    # Styles
+    title_style = styles['Title']
+    heading2 = styles['Heading2']
+    heading3 = styles['Heading3']
+    normal_style = styles['Normal']
+    small_style = ParagraphStyle('Small', parent=styles['Normal'], fontSize=8, leading=10)
+    
+    # Title
+    story.append(Paragraph("Einsatzprotokoll / After Action Report", title_style))
+    story.append(Spacer(1, 0.5*cm))
+    
+    # Shift Info
+    s_str = config.start_time.strftime('%d.%m.%Y %H:%M') if config and config.start_time else '?'
+    e_str = config.end_time.strftime('%d.%m.%Y %H:%M') if config and config.end_time else 'Laufend'
+    loc = config.location if config else 'Unbekannt'
+    addr = config.address if config and config.address else '-'
+    
+    info_data = [
+        ["Dienst:", loc, "Adresse:", addr],
+        ["Zeitraum:", f"{s_str} - {e_str}", "", ""]
+    ]
+    t = Table(info_data, colWidths=[3*cm, 8*cm, 3*cm, 8*cm])
+    t.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+        ('FONTSIZE', (0,0), (-1,-1), 10),
+        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'), # Labels bold
+        ('FONTNAME', (2,0), (2,-1), 'Helvetica-Bold'),
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 1*cm))
+    
+    # Statistics Calculation
+    valid_missions = Mission.query.filter_by(session_id=sid, is_deleted=False).order_by(Mission.created_at).all()
+    
+    # Graphs
+    # 1. Missions per Hour
+    hours = {}
+    for m in valid_missions:
+        if m.created_at:
+            h = m.created_at.strftime('%H:00')
+            hours[h] = hours.get(h, 0) + 1
+    
+    sorted_hours = sorted(hours.keys())
+    counts = [hours[h] for h in sorted_hours]
+    
+    # Plotting
+    if valid_missions:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+        
+        # Bar Chart
+        if sorted_hours:
+            ax1.bar(sorted_hours, counts, color='skyblue')
+            ax1.set_title('Einsätze pro Stunde')
+            ax1.set_xlabel('Uhrzeit')
+            ax1.set_ylabel('Anzahl')
+        else:
+            ax1.text(0.5, 0.5, 'Keine Daten', ha='center', va='center')
+
+        # Pie Chart (Reasons)
+        reasons = {}
+        for m in valid_missions:
+            reasons[m.reason] = reasons.get(m.reason, 0) + 1
+        
+        if reasons:
+            ax2.pie(reasons.values(), labels=reasons.keys(), autopct='%1.1f%%', startangle=90)
+            ax2.set_title('Einsatzarten')
+        else:
+            ax2.text(0.5, 0.5, 'Keine Daten', ha='center', va='center')
+        
+        plt.tight_layout()
+        img_buf = io.BytesIO()
+        plt.savefig(img_buf, format='png')
+        plt.close(fig)
+        img_buf.seek(0)
+        
+        img = RLImage(img_buf, width=20*cm, height=8*cm)
+        story.append(img)
+        story.append(Spacer(1, 1*cm))
+
+    # Response Times
+    response_times = []
+    for m in valid_missions:
+        logs = LogEntry.query.filter_by(mission_id=m.id, session_id=sid).all()
+        arrived_time = None
+        for l in logs:
+            if '-> BO' in (l.details or "") or '-> 4' in (l.details or ""): 
+                 arrived_time = l.timestamp
+                 break
+        
+        if arrived_time and m.created_at:
+            delta = (arrived_time - m.created_at).total_seconds() / 60.0 # Minutes
+            if delta > 0:
+                response_times.append(delta)
+
+    if response_times:
+         avg_resp = sum(response_times) / len(response_times)
+         story.append(Paragraph(f"Durchschnittliche Response Time (Disponiert -> BO): {avg_resp:.1f} Minuten", normal_style))
+         story.append(Spacer(1, 0.5*cm))
+
+    # Detailed Missions
+    story.append(Paragraph("Einsatz-Details", heading2))
+    story.append(Spacer(1, 0.2*cm))
+
+    for m in valid_missions:
+        m_num = m.mission_number or str(m.id)
+        story.append(Paragraph(f"Einsatz #{m_num}", heading3))
+        
+        # Details Table for this mission
+        start_t = m.created_at.strftime('%d.%m.%Y %H:%M:%S') if m.created_at else "?"
+        
+        # Determine End Time
+        end_time = "Laufend"
+        if m.status == 'Abgeschlossen':
+            completion_log = LogEntry.query.filter_by(mission_id=m.id, action='EINSATZ UPDATE', session_id=sid).filter(
+                LogEntry.details.like('%Status: Laufend -> Abgeschlossen%')
+            ).order_by(LogEntry.timestamp.desc()).first()
+            if completion_log:
+                end_time = completion_log.timestamp.strftime('%d.%m.%Y %H:%M:%S')
+            else:
+                end_time = "Abgeschlossen"
+
+        outcome = m.outcome or "-"
+        if (m.outcome == 'ARM' or m.outcome == 'ARM (Anderes Rettungsmittel)') and m.arm_id:
+             outcome = f"ARM {m.arm_id}"
+
+        det_data = [
+            ["Zeit:", f"{start_t} - {end_time}", "Ausgang:", outcome],
+            ["Ort:", Paragraph(m.location, normal_style), "Alarmierung:", m.alarming_entity or "-"],
+            ["Grund:", Paragraph(m.reason, normal_style), "Trupps:", ", ".join([s.name for s in m.squads])]
+        ]
+        
+        # Add description and notes if present
+        if m.description:
+             det_data.append(["Lage:", Paragraph(m.description, normal_style), "", ""])
+        if m.notes:
+             det_data.append(["Notizen:", Paragraph(m.notes, normal_style), "", ""])
+
+        dt = Table(det_data, colWidths=[2*cm, 9*cm, 3*cm, 9*cm])
+        dt.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+            ('FONTSIZE', (0,0), (-1,-1), 10),
+            ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+            ('FONTNAME', (2,0), (2,-1), 'Helvetica-Bold'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
+        ]))
+        story.append(dt)
+        
+        # Mission Log
+        m_logs = LogEntry.query.filter_by(mission_id=m.id).order_by(LogEntry.timestamp).all()
+        if m_logs:
+            story.append(Spacer(1, 0.2*cm))
+            story.append(Paragraph("Verlauf:", styles['Normal']))
+            log_data = []
+            for l in m_logs:
+                safe_details = l.details.replace("None", "(leer)") if l.details else ""
+                log_data.append([
+                    l.timestamp.strftime('%H:%M:%S'),
+                    l.action,
+                    Paragraph(safe_details, small_style)
+                ])
+            
+            lt = Table(log_data, colWidths=[2*cm, 4*cm, 16*cm])
+            lt.setStyle(TableStyle([
+                ('FONTSIZE', (0,0), (-1,-1), 8),
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ]))
+            story.append(lt)
+            
+        story.append(Spacer(1, 0.5*cm))
+        story.append(Paragraph("-" * 120, small_style)) # Separator
+        story.append(Spacer(1, 0.5*cm))
+
+    # Squad Activity
+    story.append(PageBreak())
+    story.append(Paragraph("Trupp-Aktivität", heading2))
+    
+    squads = Squad.query.filter_by(session_id=sid).all()
+    for s in squads:
+        mission_count = len([m for m in s.missions])
+        sn_text = f" [DN: {s.service_numbers}]" if s.service_numbers else ""
+        story.append(Paragraph(f"Trupp: {s.name} ({s.qualification}){sn_text} - {mission_count} Einsätze", heading3))
+        
+        s_logs = LogEntry.query.filter_by(squad_id=s.id).order_by(LogEntry.timestamp).all()
+        
+        # Logs list
+        squad_log_data = []
+        
+        # Pause Calculation vars
+        pause_periods = []
+        pause_start = None
+        
+        for l in s_logs:
+            safe_details = l.details.replace("None", "(leer)") if l.details else ""
+            
+            # Format display log
+            mission_context = ""
+            if l.mission_id:
+                mis = Mission.query.filter_by(id=l.mission_id, session_id=sid).first()
+                if mis:
+                     m_num = mis.mission_number or mis.id
+                     mission_context = f" (Einsatz #{m_num})"
+            
+            squad_log_data.append([
+                l.timestamp.strftime('%H:%M:%S'),
+                Paragraph(f"{safe_details}{mission_context}", small_style)
+            ])
+        
+        if squad_log_data:
+            slt = Table(squad_log_data, colWidths=[2.5*cm, 18*cm])
+            slt.setStyle(TableStyle([
+                ('FONTSIZE', (0,0), (-1,-1), 8),
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.whitesmoke, colors.white])
+            ]))
+            story.append(slt)
+        
+        story.append(Spacer(1, 0.5*cm))
+
+    # Full Log
+    story.append(PageBreak())
+    story.append(Paragraph("Gesamtes Logbuch", heading2))
+    
+    all_logs = LogEntry.query.filter_by(session_id=sid).order_by(LogEntry.timestamp).all()
+    full_log_data = [["Zeit", "Aktion", "Details"]]
+    for l in all_logs:
+        safe_details = l.details.replace("None", "(leer)") if l.details else ""
+        full_log_data.append([
+            l.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            l.action,
+            Paragraph(safe_details, small_style)
+        ])
+    
+    flt = Table(full_log_data, colWidths=[4*cm, 4*cm, 18*cm], repeatRows=1)
+    flt.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+    ]))
+    story.append(flt)
+
+    # Deleted Missions
+    deleted_missions = Mission.query.filter_by(session_id=sid, is_deleted=True).order_by(Mission.created_at).all()
+    if deleted_missions:
+        story.append(PageBreak())
+        story.append(Paragraph("Gelöschte Einsätze", heading2))
+        
+        for m in deleted_missions:
+             m_num = m.mission_number or str(m.id)
+             story.append(Paragraph(f"Einsatz #{m_num} ({m.location})", heading3))
+             story.append(Paragraph(f"Grund für Löschung: {m.deletion_reason or '-'}", normal_style))
+             story.append(Spacer(1, 0.2*cm))
+             
+             # Logs for deleted mission
+             m_logs = LogEntry.query.filter_by(mission_id=m.id).order_by(LogEntry.timestamp).all()
+             if m_logs:
+                 del_log_data = []
+                 for l in m_logs:
+                    safe_details = l.details.replace("None", "(leer)") if l.details else ""
+                    del_log_data.append([
+                        l.timestamp.strftime('%H:%M:%S'),
+                        l.action,
+                        Paragraph(safe_details, small_style)
+                    ])
+                 dlt = Table(del_log_data, colWidths=[2*cm, 4*cm, 16*cm])
+                 dlt.setStyle(TableStyle([('FONTSIZE', (0,0), (-1,-1), 8), ('VALIGN', (0,0), (-1,-1), 'TOP')]))
+                 story.append(dlt)
+             
+             story.append(Spacer(1, 0.5*cm))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+@app.route('/api/export/pdf', methods=['GET'])
+def export_pdf():
+    sid = get_session_id()
+    config = ShiftConfig.query.filter_by(is_active=True, session_id=sid).first()
+    if not config:
+        config = ShiftConfig.query.filter_by(session_id=sid).order_by(ShiftConfig.id.desc()).first()
+        
+    mem = generate_pdf_file(config)
+    filename = f"report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    return send_file(mem, as_attachment=True, download_name=filename, mimetype='application/pdf')
 if __name__ == '__main__':
     with app.app_context():
         # Auto-create DB if not exists, but we rely on a manual reset or Init API for clean slate usually

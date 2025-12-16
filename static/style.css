@@ -803,6 +803,7 @@ body.dark-mode .squad-select-btn.selected {
     padding: 0.5rem;
     border-radius: 4px;
     font-size: 0.95rem;
+    white-space: pre-wrap;
 }
 
 .mission-notes {

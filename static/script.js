@@ -846,8 +846,8 @@ function renderMissions() {
                 <div class="full-width"><strong>Trupps:</strong> <div style="display:inline-flex; gap:0.5rem; flex-wrap:wrap;">${squadsHtml}</div></div>
                 ${mission.alarming_entity ? `<div><strong>Alarm:</strong> ${mission.alarming_entity}</div>` : ''}
                 ${outcomeHtml}
-                ${mission.description ? `<div class="full-width" style="margin-top:0.5rem; white-space: pre-wrap; color:#ddd;"><em>${mission.description}</em></div>` : ''}
-                ${mission.notes ? `<div class="full-width" style="margin-top:0.5rem; font-size:0.9em; color:#bbb;">📝 ${mission.notes}</div>` : ''}
+                ${mission.description ? `<div class="mission-desc full-width">${mission.description}</div>` : ''}
+                ${mission.notes ? `<div class="mission-notes full-width">Notizen: ${mission.notes}</div>` : ''}
             </div>
         `;
         return card;
@@ -1365,6 +1365,10 @@ async function completeMission() {
     loadData();
 }
 
+
+function openExportModal() {
+    document.getElementById('export-modal').classList.add('open');
+}
 
 function openDeleteMissionModal() {
     document.getElementById('delete-mission-reason').value = '';

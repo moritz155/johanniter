@@ -229,7 +229,7 @@
 
         <div class="header-actions">
             <button id="btn-log" onclick="openLogModal()">Protokoll</button>
-            <button id="btn-export" onclick="window.location.href='/api/export'">Exportieren</button>
+            <button id="btn-export" onclick="openExportModal()">Exportieren</button>
             <button id="btn-end-shift" onclick="endShift()" class="btn-danger">Dienst beenden</button>
         </div>
     </header>
@@ -542,6 +542,24 @@
             <div class="modal-footer" style="justify-content: flex-end;">
                 <!-- Cancel Removed -->
                 <button class="btn-success" onclick="submitCompletion()">Abschließen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Selection Modal -->
+    <div id="export-modal" class="modal">
+        <div class="modal-content small" style="text-align: center;">
+            <div class="modal-header">
+                <h2>Format wählen</h2>
+                <button class="close-btn" onclick="closeModal('export-modal')">&times;</button>
+            </div>
+            <p style="margin-bottom: 1.5rem;">Bitte wählen Sie das gewünschte Format für den Export:</p>
+            <div class="modal-footer" style="justify-content: center; gap: 1rem;">
+                <button class="btn-primary"
+                    onclick="window.location.href='/api/export'; closeModal('export-modal')">Text
+                    (.txt)</button>
+                <button class="btn-primary"
+                    onclick="window.location.href='/api/export/pdf'; closeModal('export-modal')">PDF (.pdf)</button>
             </div>
         </div>
     </div>
