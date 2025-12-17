@@ -271,7 +271,7 @@
                 <h2 id="mission-modal-title">Neuer Einsatz</h2>
                 <button class="close-btn" onclick="closeModal('new-mission-modal')">&times;</button>
             </div>
-            <form id="new-mission-form" onsubmit="submitMission(event)">
+            <form id="new-mission-form">
                 <input type="hidden" id="edit-mission-id">
 
                 <div class="row">
@@ -322,7 +322,7 @@
                         <option value="">-- Bitte wählen --</option>
                         <option value="Intervention unterblieben">Intervention unterblieben</option>
                         <option value="Belassen">Belassen (vor Ort belassen)</option>
-                        <option value="ARM">ARM (Anderes Rettungsmittel)</option>
+                        <option value="ARM">Übergeben (Rettungsdienst / Andere)</option>
                         <option value="PVW">PVW (Patient verweigert)</option>
                     </select>
 
@@ -336,6 +336,10 @@
                                 <input type="text" id="m-arm-id" placeholder="Kennung (z.B. 12/83-1)">
                             </div>
                         </div>
+                        <div style="margin-top: 0.5rem;">
+                            <input type="text" id="m-arm-note" placeholder="Notiz zur Übergabe (Optional)"
+                                style="width: 100%;">
+                        </div>
                     </div>
                 </div>
 
@@ -343,9 +347,10 @@
                     <button type="button" class="btn-danger" id="btn-delete-mission" onclick="openDeleteMissionModal()"
                         style="display:none;">Löschen</button>
                     <!-- Cancel Removed -->
-                    <button type="button" class="btn-success" id="btn-complete-mission" onclick="completeMission()"
+                    <button type="button" class="btn-danger" id="btn-complete-mission" onclick="completeMission()"
                         style="display:none;">Abschließen</button>
-                    <button type="submit" class="btn-primary">Speichern</button>
+                    <button type="button" class="btn-success" id="btn-save-mission"
+                        onclick="submitMission(event)">Speichern</button>
                 </div>
             </form>
         </div>
@@ -375,7 +380,7 @@
                 <h2 id="squad-modal-title">Neuer Trupp</h2>
                 <button class="close-btn" onclick="closeModal('squad-modal')">&times;</button>
             </div>
-            <form id="s-form" onsubmit="submitSquad(event)">
+            <form id="s-form">
                 <input type="hidden" id="s-id">
                 <div class="form-group">
                     <label>Name</label>
@@ -398,6 +403,29 @@
             </form>
         </div>
     </div>
+
+    <!-- Manual Location Modal -->
+    <div id="location-modal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h2>Standort anpassen</h2>
+                <button class="close-btn" onclick="closeModal('location-modal')">&times;</button>
+            </div>
+            <form onsubmit="submitLocationOverride(event)">
+                <input type="hidden" id="loc-squad-id">
+                <p>Geben Sie einen manuellen Standort ein. Lassen Sie das Feld leer, um den automatisch ermittelten
+                    Standort zu verwenden.</p>
+                <div class="form-group">
+                    <label>Standort</label>
+                    <input type="text" id="loc-manual-input" placeholder="z.B. Raum 1">
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
 
     <!-- Squad Removal Status Prompt Modal -->
     <div id="remove-squad-modal" class="modal">
@@ -522,7 +550,7 @@
                     <option value="">-- Bitte wählen --</option>
                     <option value="Intervention unterblieben">Intervention unterblieben</option>
                     <option value="Belassen">Belassen (vor Ort belassen)</option>
-                    <option value="ARM">ARM (Anderes Rettungsmittel)</option>
+                    <option value="ARM">Übergeben (Rettungsdienst / Andere)</option>
                     <option value="PVW">PVW (Patient verweigert)</option>
                 </select>
             </div>
@@ -536,6 +564,9 @@
                     <div class="form-group" style="flex: 1;">
                         <input type="text" id="arm-id" placeholder="Kennung (z.B. 12/83-1)">
                     </div>
+                </div>
+                <div style="margin-top: 0.5rem;">
+                    <input type="text" id="arm-note" placeholder="Notiz zur Übergabe (Optional)" style="width: 100%;">
                 </div>
             </div>
 
@@ -565,7 +596,7 @@
     </div>
 
     <div id="guide-overlay" class="guide-overlay"></div>
-    <script src="{{ url_for('static', filename='script.js') }}?v=FORCE_RELOAD_999"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=FIX_EDIT_v1"></script>
     <script>
         // Inline Weather Script for maximum reliability
 

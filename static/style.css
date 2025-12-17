@@ -371,7 +371,97 @@ main {
     text-overflow: ellipsis;
     min-height: 1.2em;
     /* Ensure height even if empty */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-right: -3.5rem;
+
+
+    /* Badge Style */
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    transition: background-color 0.2s, color 0.2s;
 }
+
+.clickable-location {
+    cursor: pointer;
+    border-bottom: 1px dotted transparent;
+    /* Subtle hint or completely invisible? User said "optisch nix ändern". */
+    /* Let's keep it invisible but with pointer */
+}
+
+.clickable-location:hover {
+    opacity: 0.8;
+}
+
+.clickable-badge {
+    cursor: pointer;
+}
+
+.clickable-badge:hover {
+    filter: brightness(0.95);
+    /* Slight dim to indicate interaction */
+}
+
+.initial-loc {
+    font-weight: normal;
+    font-size: 0.85em;
+    opacity: 0.8;
+    margin-left: 0.3em;
+}
+
+/* Status Backgrounds */
+.squad-status-text.status-2 {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+}
+
+/* EB - Green */
+.squad-status-text.status-3 {
+    background-color: #fff3e0;
+    color: #ef6c00;
+}
+
+/* zBO - Orange */
+.squad-status-text.status-4 {
+    background-color: #e3f2fd;
+    color: #1565c0;
+}
+
+/* BO - Blue */
+.squad-status-text.status-7 {
+    background-color: #f3e5f5;
+    color: #7b1fa2;
+}
+
+/* zAO - Purple */
+.squad-status-text.status-8 {
+    background-color: #f3e5f5;
+    color: #4a148c;
+}
+
+/* AO - Deep Purple */
+.squad-status-text.status-Pause {
+    background-color: #fafafa;
+    color: #757575;
+    border: 1px solid #eee;
+}
+
+/* Pause - Grey */
+.squad-status-text.status-NEB {
+    background-color: #fbe9e7;
+    color: #d84315;
+}
+
+/* NEB - Deep Orange */
+.squad-status-text.status-Integriert {
+    background-color: #fffde7;
+    color: #fbc02d;
+}
+
+/* Disp - Yellow */
+
 
 .squad-timer {
     font-family: monospace;
@@ -397,6 +487,9 @@ main {
     gap: 4px;
     overflow-x: auto;
     /* Allow scroll if too tight */
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+    margin-top: 0.5rem;
 }
 
 .status-btn {

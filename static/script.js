@@ -430,6 +430,134 @@ function renderSquads() {
             { code: 'NEB', label: 'NEB', class: 'sNEB' }
         ];
 
+        let locInfo = squad.current_status;
+        const statusMap = {
+            '2': 'Einsatzbereit',
+            '3': 'Zum Berufungsort',
+            '4': 'Am Berufungsort',
+            '7': 'Zum Abgabeort',
+            '8': 'Am Abgabeort',
+            'Pause': 'Pause',
+            'NEB': 'Nicht Einsatzbereit',
+            'Integriert': 'Disponiert'
+        };
+
+
+        if (statusMap[squad.current_status]) {
+            // Removed duplicate locInfo setting. 
+            // Logic is now consolidated in the active/inactive checks below.
+        }
+
+
+
+        // Location Info
+        // ... (Already handled above)
+
+        if (squad.active_mission) {
+            let leftPart = "";
+            let rightPart = "";
+
+            // Determine Parts based on Status
+            // Special Display for zAO (7) -> Split View: Mission + "r. BHP"
+            if (squad.current_status === '7') {
+                const missionNum = squad.active_mission.mission_number || squad.active_mission.id;
+                leftPart = `Einsatz #${missionNum} (${squad.active_mission.location}) - ${squad.active_mission.reason}`;
+                rightPart = "r. BHP";
+
+                // Special Display for AO (8) -> Mission Info + "BHP"
+            } else if (squad.current_status === '8') {
+                // User: "kannst du beim Status AO die Info trotzdem zeigen"
+                const missionNum = squad.active_mission.mission_number || squad.active_mission.id;
+                leftPart = `Einsatz #${missionNum} (${squad.active_mission.location}) - ${squad.active_mission.reason}`;
+                rightPart = "BHP";
+            } else {
+                // All other active statuses (3, 4)
+
+                // Left: Mission Info (Number + Reason)
+                // "Links ist Einstzinfo"
+                leftPart = `Einsatz #${squad.active_mission.mission_number || squad.active_mission.id} - ${squad.active_mission.reason}`;
+
+                // Right: Location
+                // "rechts ist Standort"
+                if (squad.current_status === '7') {
+                    // zAO (7) -> "r. BHP"
+                    rightPart = "r. BHP";
+                    leftPart = `Einsatz #${squad.active_mission.mission_number || squad.active_mission.id} (${squad.active_mission.location}) - ${squad.active_mission.reason}`;
+                } else if (squad.current_status === '3') {
+                    // zBO (3) -> "r. [Location]"
+                    // "bei status zBO soll immer ein r. vor den Standort stehen"
+                    rightPart = "r. " + squad.active_mission.location;
+                } else {
+                    // Standard (4) -> Real Location on Right
+                    rightPart = squad.active_mission.location;
+                }
+            }
+
+            // OVERRIDE: If custom_location is set, it replaces the Right Part (Location)
+            // EXCEPTION: For zBO (3) and BO (4), we ALWAYS show the Mission Location (or r. + Mission Location).
+            // So we ignore any 'dormant' custom_location that might be stored from a previous zAO state.
+            if (squad.custom_location && !['3', '4'].includes(squad.current_status)) {
+                rightPart = squad.custom_location;
+
+                // User Request: "Initial:" info removed.
+
+            }
+
+            locInfo = `<span>${leftPart}</span><span>${rightPart}</span>`;
+
+            // Warning Check: Mission active but Status is 2 (EB), Pause, or NEB
+            const invalidStatuses = ['2', 'Pause', 'NEB'];
+            if (invalidStatuses.includes(squad.current_status)) {
+                locInfo += `<span class="status-warning-dot" title="Status prüfen!"></span>`;
+            }
+        } else {
+            // No Active Mission (e.g. Status 1, 2, 6, OR 3/4/7/8 after mission completion)
+            if (statusMap[squad.current_status]) {
+                const defaultText = statusMap[squad.current_status];
+                let rightPart = "";
+
+                // Logic to persist location from LAST COMPLETED MISSION if currently in operational status
+                if (['3', '4', '7', '8'].includes(squad.current_status)) {
+                    // Try to find last completed mission for context
+                    const completedMissions = missionsData
+                        .filter(m => m.status === 'Abgeschlossen' && m.squad_ids && m.squad_ids.includes(squad.id))
+                        .sort((a, b) => (b.id) - (a.id)); // Sort Descending by ID
+
+                    const lastMission = completedMissions.length > 0 ? completedMissions[0] : null;
+
+                    if (squad.current_status === '7') {
+                        rightPart = "r. BHP";
+                    } else if (squad.current_status === '8') {
+                        rightPart = "BHP";
+                    } else if (squad.current_status === '3') {
+                        rightPart = lastMission ? ("r. " + lastMission.location) : "r. Standort?";
+                    } else if (squad.current_status === '4') {
+                        rightPart = lastMission ? lastMission.location : "Standort?";
+                    }
+                }
+
+                // Status 2 (EB) Logic or Priority Overrides
+                if (squad.current_status === '2') {
+                    // For EB, we use custom or blank (handled by standard override check below, usually)
+                    // But EB has special "Left Right" split requests previously?
+                    // Currently falls into "Status Label" | "Custom/Right" Logic below.
+                }
+
+                // Apply Custom Location Override (Highest Priority)
+                if (squad.custom_location) {
+                    rightPart = squad.custom_location;
+                }
+
+                // If rightPart is still empty (e.g. Status 1/2/6 without custom), just show single span? Or empty right span?
+                // Logic:
+                if (rightPart) {
+                    locInfo = `<span>${defaultText}</span><span>${rightPart}</span>`;
+                } else {
+                    locInfo = `<span>${defaultText}</span>`;
+                }
+            }
+        }
+
         let buttonsHtml = '';
         statuses.forEach(st => {
             let label = st.label;
@@ -446,36 +574,10 @@ function renderSquads() {
                 onclick="setSquadStatus(${squad.id}, '${st.code}')">${label}</button>`;
         });
 
-        // Location Info
-        let locInfo = squad.current_status;
-        const statusMap = {
-            '2': 'Einsatzbereit',
-            '3': 'Zum Berufungsort',
-            '4': 'Am Berufungsort',
-            '7': 'Zum Abgabeort',
-            '8': 'Am Abgabeort',
-            'Pause': 'Pause',
-            '8': 'Am Abgabeort',
-            'Pause': 'Pause',
-            'NEB': 'Nicht Einsatzbereit',
-            'Pause': 'Pause',
-            'NEB': 'Nicht Einsatzbereit',
-            'Integriert': 'Disponiert'
-        };
-
-        if (statusMap[squad.current_status]) {
-            locInfo = statusMap[squad.current_status];
-        }
-
-        if (squad.active_mission) {
-            locInfo = `Einsatz #${squad.active_mission.mission_number || squad.active_mission.id} (${squad.active_mission.location}) - ${squad.active_mission.reason}`;
-
-            // Warning Check: Mission active but Status is 2 (EB), Pause, or NEB
-            const invalidStatuses = ['2', 'Pause', 'NEB'];
-            if (invalidStatuses.includes(squad.current_status)) {
-                locInfo += `<span class="status-warning-dot" title="Status prüfen!"></span>`;
-            }
-        }
+        // Clickable Badge Logic - GLOBAL enablement
+        // "egal welcher Status" -> always clickable
+        const badgeOnClick = `onclick="openLocationModal(${squad.id}, '${squad.custom_location || ''}')"`;
+        let badgeClass = `squad-status-text status-${squad.current_status} clickable-badge`;
 
         card.setAttribute('draggable', true);
         card.dataset.id = squad.id;
@@ -489,9 +591,9 @@ function renderSquads() {
             <div class="squad-info">
                 <div style="display:flex; align-items:center; gap: 0.5rem;">
                     <h3>${squad.name} <span class="qual-badge">${squad.qualification}</span></h3>
-                    <button class="icon-btn tiny" onclick='editSquad(${JSON.stringify(squad)})' title="Trupp bearbeiten">✎</button>
+                    <button class="icon-btn tiny" onclick='editSquad(${JSON.stringify(squad).replace(/'/g, "&#39;")})' title="Trupp bearbeiten">✎</button>
                 </div>
-                <div class="squad-status-text">${locInfo}</div>
+                <div class="${badgeClass}" ${badgeOnClick} title="Klicken um Standort zu ändern">${locInfo}</div>
                 <div class="squad-actions">
                     ${buttonsHtml}
                 </div>
@@ -548,7 +650,7 @@ async function setSquadStatus(id, status) {
     const squad = squadsData.find(s => s.id === id);
     if (!squad) return;
 
-    if (status === 'NEB' || (status === '2' && squad.current_status === 'Integriert')) {
+    if (status === 'NEB' || status === '2') {
         // Find ALL active missions this squad is in
         const activeMissions = missionsData.filter(m =>
             m.status !== 'Abgeschlossen' && m.squad_ids.includes(id)
@@ -590,16 +692,15 @@ function processNextNebConflict() {
     const btnKeep = document.getElementById('btn-neb-keep');
 
     if (target === '2') {
-        // Disp -> EB Case
-        if (title) title.textContent = "Trupp Status zurücksetzen";
-        text.innerHTML = `<strong>${squad.name}</strong> ist aktuell disponiert (Einsatz #${mNum}).<br>Wirklich Einsatzbereit (Frei) setzen?`;
+        // Active Mission -> EB Case
+        if (title) title.textContent = "Trupp ist im Einsatz";
+        text.innerHTML = `<strong>${squad.name}</strong> ist aktuell dem Einsatz <strong>#${mNum}</strong> zugewiesen.<br>Wie möchten Sie fortfahren?`;
 
-        btnRemove.textContent = "Ja, EB setzen & aus Einsatz entfernen";
+        btnRemove.textContent = "Aus Einsatz entfernen & EB setzen";
         btnRemove.style.display = 'block';
 
-        // Hide "Keep" button as user wants binary choice yes/no (cancel is X)
-        // Or re-purpose keep as cancel? No, X is cancel.
-        btnKeep.style.display = 'none';
+        btnKeep.textContent = "Im Einsatz behalten & EB setzen";
+        btnKeep.style.display = 'block';
     } else {
         // Standard NEB Case
         if (title) title.textContent = "Trupp ist im Einsatz";
@@ -711,6 +812,31 @@ async function submitSquad(e) {
     loadData();
 }
 
+// --- Manual Location Override ---
+function openLocationModal(squadId, currentLocation) {
+    document.getElementById('loc-squad-id').value = squadId;
+    document.getElementById('loc-manual-input').value = currentLocation || '';
+    document.getElementById('location-modal').classList.add('open');
+}
+
+async function submitLocationOverride(e) {
+    e.preventDefault();
+    const id = document.getElementById('loc-squad-id').value;
+    const location = document.getElementById('loc-manual-input').value;
+
+    try {
+        await fetch(`/api/squads/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ custom_location: location })
+        });
+        closeModal('location-modal');
+        loadData();
+    } catch (error) {
+        console.error("Error setting custom location:", error);
+    }
+}
+
 async function deleteSquad() {
     const id = document.getElementById('s-id').value;
     if (!id) return;
@@ -817,15 +943,27 @@ function renderMissions() {
                 'Intervention unterblieben': 'Int. Unt.',
                 'Belassen': 'Belassen',
                 'Belassen (vor Ort belassen)': 'Belassen',
-                'ARM': 'ARM',
-                'ARM (Anderes Rettungsmittel)': 'ARM',
+                'ARM': 'Übergeben',
+                'ARM (Anderes Rettungsmittel)': 'Übergeben',
                 'PVW': 'PVW',
                 'PVW (Patient verweigert)': 'PVW'
             };
             const abbr = outcomeMap[mission.outcome] || mission.outcome;
             let outcomeText = abbr;
-            if ((mission.outcome === 'ARM' || mission.outcome === 'ARM (Anderes Rettungsmittel)') && mission.arm_id) {
-                outcomeText = `ARM / ${mission.arm_id}`;
+
+            // Check for ARM/Handover specific fields
+            if (outcomeText === 'Übergeben' || mission.outcome === 'ARM' || mission.outcome.startsWith('Übergabe')) {
+                // Force consistent label
+                outcomeText = 'Übergeben';
+
+                const parts = [];
+                if (mission.arm_type) parts.push(mission.arm_type);
+                if (mission.arm_id) parts.push(mission.arm_id);
+                if (mission.arm_notes) parts.push(mission.arm_notes);
+
+                if (parts.length > 0) {
+                    outcomeText += ` / ${parts.join(' / ')}`;
+                }
             }
             outcomeHtml = `<div><strong>Ausgang:</strong> <span style="color: #4CAF50; font-weight: 600;">${outcomeText}</span></div>`;
         }
@@ -838,10 +976,14 @@ function renderMissions() {
                       ${mission.status === 'Laufend' ? `style="cursor: pointer;" onclick='openCompleteMissionModal(${mission.id})' title="Einsatz abschließen"` : ''}>
                     ${mission.status}
                 </span>
-                <button class="edit-btn" onclick='editMission(${JSON.stringify(mission)})'>✎</button>
+                <button class="edit-btn" onclick='editMission(${JSON.stringify(mission).replace(/'/g, "&#39;")})'>✎</button>
             </div>
             <div class="mission-details">
-                <div><strong>Ort:</strong> ${mission.location}</div>
+                <div>
+                    <strong>Ort:</strong> ${mission.location}
+                    ${(mission.initial_location && mission.initial_location !== mission.location) ?
+                `<span class="initial-mission-loc" style="color: #666; font-size: 0.9em; margin-left: 0.5rem;">(Initial: ${mission.initial_location})</span>` : ''}
+                </div>
                 <div><strong>Grund:</strong> ${mission.reason}</div>
                 <div class="full-width"><strong>Trupps:</strong> <div style="display:inline-flex; gap:0.5rem; flex-wrap:wrap;">${squadsHtml}</div></div>
                 ${mission.alarming_entity ? `<div><strong>Alarm:</strong> ${mission.alarming_entity}</div>` : ''}
@@ -922,6 +1064,14 @@ function openNewMissionModal() {
     const outcomeGroup = document.getElementById('outcome-group');
     outcomeGroup.style.display = 'none';
     document.getElementById('m-outcome').value = "";
+    document.getElementById('m-arm-note').value = "";
+
+    // Reset Counter Label
+    const squadContainer = document.getElementById('m-squad-select');
+    if (squadContainer && squadContainer.parentElement) {
+        const label = squadContainer.parentElement.querySelector('label');
+        if (label) label.textContent = "Zugeordnete Trupps (0)";
+    }
 
     // Inline Flex container style
     container.style.display = 'flex';
@@ -958,6 +1108,26 @@ function openNewMissionModal() {
 
 function toggleSquadSelection(button) {
     button.classList.toggle('selected');
+    updateSquadSelectionCounter();
+}
+
+function updateSquadSelectionCounter() {
+    const count = document.querySelectorAll('#m-squad-select .squad-select-btn.selected').length;
+    const label = document.querySelector('label[for="m-squad-select"]') || document.querySelector('#new-mission-form label:nth-of-type(3)');
+    // nth-of-type is risky. Let's find the label by text content or add an ID to the label in openNewMissionModal or just traverse.
+    // Better: In openNewMissionModal we can retrieve the label easily if we gave it an ID. 
+    // But since I can't edit HTML right now comfortably without reloading, I'll rely on a known ID I will add via JS or querySelector.
+
+    // Let's look for the label preceding #m-squad-select
+    const container = document.getElementById('m-squad-select');
+    if (container && container.previousElementSibling) {
+        // The label is likely in the previous sibling (label) or parent's previous sibling.
+        // Structure is: <div class="form-group"><label>...</label><div id="m-squad-select">...</div></div>
+        const label = container.parentElement.querySelector('label');
+        if (label) {
+            label.textContent = `Zugeordnete Trupps (${count})`;
+        }
+    }
 }
 
 function editMission(mission) {
@@ -1029,6 +1199,7 @@ function editMission(mission) {
     // Populate ARM values if present
     if (mission.arm_id) document.getElementById('m-arm-id').value = mission.arm_id;
     if (mission.arm_type) document.getElementById('m-arm-type').value = mission.arm_type;
+    if (mission.arm_notes) document.getElementById('m-arm-note').value = mission.arm_notes;
 
     // Show Delete button for editing
     document.getElementById('btn-delete-mission').style.display = 'inline-block';
@@ -1043,7 +1214,10 @@ function editMission(mission) {
         statusDiv = document.createElement('div');
         statusDiv.id = 'edit-status-group';
         statusDiv.className = 'form-group';
-        const btnGroup = document.getElementById('new-mission-form').querySelector('button[type="submit"]').parentNode;
+        statusDiv.className = 'form-group';
+        const btnSave = document.getElementById('btn-save-mission');
+        // Fallback or Parent
+        const btnGroup = btnSave.parentNode;
         btnGroup.parentNode.insertBefore(statusDiv, btnGroup);
     }
 
@@ -1075,7 +1249,7 @@ function editMission(mission) {
 function toggleEditArmFields() {
     const outcome = document.getElementById('m-outcome').value;
     const armGroup = document.getElementById('m-arm-fields');
-    if (outcome === 'ARM' || outcome === 'ARM (Anderes Rettungsmittel)') {
+    if (outcome === 'ARM' || outcome.startsWith('Übergeben') || outcome.startsWith('ARM')) {
         armGroup.style.display = 'block';
     } else {
         armGroup.style.display = 'none';
@@ -1089,13 +1263,14 @@ function openCompleteMissionModal(id) {
     document.getElementById('arm-fields').style.display = 'none';
     document.getElementById('arm-id').value = '';
     document.getElementById('arm-type').value = '';
+    document.getElementById('arm-note').value = '';
     document.getElementById('complete-mission-modal').classList.add('open');
 }
 
 function toggleArmFields() {
     const outcome = document.getElementById('complete-mission-outcome').value;
     const armGroup = document.getElementById('arm-fields');
-    if (outcome === 'ARM' || outcome === 'ARM (Anderes Rettungsmittel)') {
+    if (outcome === 'ARM' || outcome.startsWith('Übergeben') || outcome.startsWith('ARM')) {
         armGroup.style.display = 'block';
     } else {
         armGroup.style.display = 'none';
@@ -1116,13 +1291,15 @@ async function submitCompletion() {
         outcome: outcome
     };
 
-    if (outcome === 'ARM' || outcome === 'ARM (Anderes Rettungsmittel)') {
+    if (outcome === 'ARM' || outcome.startsWith('Übergeben') || outcome.startsWith('ARM')) {
         const armId = document.getElementById('arm-id').value;
         const armType = document.getElementById('arm-type').value;
+        const armNote = document.getElementById('arm-note').value;
 
         // Fields are optional now
         if (armId) payload.arm_id = armId;
         if (armType) payload.arm_type = armType;
+        if (armNote) payload.arm_notes = armNote;
     }
 
     try {
@@ -1142,83 +1319,90 @@ async function submitCompletion() {
 
 async function submitMission(e) {
     e.preventDefault();
-    const id = document.getElementById('edit-mission-id').value;
+    console.log("submitMission called"); // Debug
+    try {
+        const id = document.getElementById('edit-mission-id').value;
 
-    // Get selected squads from buttons
-    const squadIds = Array.from(document.querySelectorAll('#m-squad-select .squad-select-btn.selected'))
-        .map(btn => parseInt(btn.dataset.squadId));
+        // Get selected squads from buttons - Scoped to the FORM (#new-mission-form)
+        // Use Set to strictly deduplicate IDs (though scope helps too)
+        const rawIds = Array.from(document.querySelectorAll('#new-mission-form #m-squad-select .squad-select-btn.selected'))
+            .map(btn => parseInt(btn.dataset.squadId));
+        const squadIds = [...new Set(rawIds)];
 
-    // Customize Mission Number: Pad to 3 digits if numeric
-    let mNum = document.getElementById('m-number').value;
-    if (mNum && !isNaN(parseInt(mNum))) {
-        mNum = String(parseInt(mNum)).padStart(3, '0');
-    }
+        // Customize Mission Number: Pad to 3 digits if numeric
+        let mNum = document.getElementById('m-number').value;
+        if (mNum && !isNaN(parseInt(mNum))) {
+            mNum = String(parseInt(mNum)).padStart(3, '0');
+        }
 
-    const payload = {
-        mission_number: mNum,
-        location: document.getElementById('m-location').value,
-        alarming_entity: document.getElementById('m-entity').value,
-        reason: document.getElementById('m-reason').value,
-        description: document.getElementById('m-desc').value,
-        notes: document.getElementById('m-notes').value,
-        outcome: document.getElementById('m-outcome').value || null,
-        squad_ids: squadIds
-    };
+        const payload = {
+            mission_number: mNum,
+            location: document.getElementById('m-location').value,
+            alarming_entity: document.getElementById('m-entity').value,
+            reason: document.getElementById('m-reason').value,
+            description: document.getElementById('m-desc').value,
+            notes: document.getElementById('m-notes').value,
+            outcome: document.getElementById('m-outcome').value || null,
+            squad_ids: squadIds
+        };
+        console.log("Payload prepared:", payload); // Debug
 
-    // Add ARM fields if outcome matches
-    const outcomeVal = payload.outcome;
-    if (outcomeVal === 'ARM' || outcomeVal === 'ARM (Anderes Rettungsmittel)') {
-        const armId = document.getElementById('m-arm-id').value;
-        const armType = document.getElementById('m-arm-type').value;
-        if (armId) payload.arm_id = armId;
-        if (armType) payload.arm_type = armType;
-    }
+        // Add ARM fields if outcome matches
+        const outcomeVal = payload.outcome;
+        if (outcomeVal === 'ARM' || outcomeVal.startsWith('Übergeben') || outcomeVal.startsWith('ARM')) {
+            const armId = document.getElementById('m-arm-id').value;
+            const armType = document.getElementById('m-arm-type').value;
+            const armNote = document.getElementById('m-arm-note').value;
 
-    // Check for Removed Squads (only if editing)
-    if (id) {
-        const mission = missionsData.find(m => m.id == id);
-        if (mission && mission.squad_ids) {
-            const currentIds = mission.squad_ids; // IDs currently in backend
-            const newIds = payload.squad_ids;
+            if (armId) payload.arm_id = armId;
+            if (armType) payload.arm_type = armType;
+            if (armNote) payload.arm_notes = armNote;
+        }
 
-            // Find IDs that are in current but NOT in new
-            const removedIds = currentIds.filter(sid => !newIds.includes(sid));
+        // Check for Removed Squads (only if editing)
+        if (id) {
+            const mission = missionsData.find(m => m.id == id);
+            if (mission && mission.squad_ids) {
+                const currentIds = mission.squad_ids; // IDs currently in backend
+                const newIds = payload.squad_ids;
 
-            // Filter out squads that are assigned to OTHER active missions
-            // If they are in another active mission, we should not change their status (or prompt for it)
-            const reallyRemovedIds = removedIds.filter(sid => {
-                const inOtherMission = missionsData.some(m =>
-                    m.id != id &&
-                    m.status !== 'Abgeschlossen' &&
-                    m.squad_ids &&
-                    m.squad_ids.includes(sid)
-                );
-                return !inOtherMission;
-            });
+                // Find IDs that are in current but NOT in new
+                const removedIds = currentIds.filter(sid => !newIds.includes(sid));
 
-            if (reallyRemovedIds.length > 0) {
-                // Intercept!
-                pendingMissionPayload = payload;
-                pendingMissionId = id;
-                pendingRemovedSquadIds = reallyRemovedIds;
-
-                // Show Prompt
-                const listEl = document.getElementById('remove-squad-list');
-                listEl.innerHTML = '';
-                reallyRemovedIds.forEach(sid => {
-                    const squad = squadsData.find(s => s.id === sid);
-                    const li = document.createElement('li');
-                    li.textContent = squad ? squad.name : `Trupp #${sid}`;
-                    listEl.appendChild(li);
+                // Filter out squads that are assigned to OTHER active missions
+                // If they are in another active mission, we should not change their status (or prompt for it)
+                const reallyRemovedIds = removedIds.filter(sid => {
+                    const inOtherMission = missionsData.some(m =>
+                        m.id != id &&
+                        m.status !== 'Abgeschlossen' &&
+                        m.squad_ids &&
+                        m.squad_ids.includes(sid)
+                    );
+                    return !inOtherMission;
                 });
 
-                document.getElementById('remove-squad-modal').classList.add('open');
-                return; // STOP Here
+                if (reallyRemovedIds.length > 0) {
+                    // Intercept!
+                    pendingMissionPayload = payload;
+                    pendingMissionId = id;
+                    pendingRemovedSquadIds = reallyRemovedIds;
+
+                    // Show Prompt
+                    const listEl = document.getElementById('remove-squad-list');
+                    listEl.innerHTML = '';
+                    reallyRemovedIds.forEach(sid => {
+                        const squad = squadsData.find(s => s.id === sid);
+                        const li = document.createElement('li');
+                        li.textContent = squad ? squad.name : `Trupp #${sid}`;
+                        listEl.appendChild(li);
+                    });
+
+                    document.getElementById('remove-squad-modal').classList.add('open');
+                    return; // STOP Here
+                }
             }
         }
-    }
 
-    try {
         let response;
         if (id) {
             // Edit
@@ -1320,9 +1504,20 @@ async function completeMission() {
         return;
     }
 
-    // Get selected squads from buttons
-    const squadIds = Array.from(document.querySelectorAll('#m-squad-select .squad-select-btn.selected'))
+    // Get selected squads from buttons - Scoped to the FORM to avoid phantom selections
+    // Use the form ID explicitly: #new-mission-form
+    const squadIds = Array.from(document.querySelectorAll('#new-mission-form #m-squad-select .squad-select-btn.selected'))
         .map(btn => parseInt(btn.dataset.squadId));
+
+    // DEBUG: Inform user what is being sent
+    if (squadIds.length > 0) {
+        // alert("DEBUG: Sending Squad IDs: " + squadIds.join(", "));
+    } else {
+        // alert("DEBUG: No Squads Selected (IDs: [])");
+    }
+    // Note: I commented out the alert to avoid spamming, but if the user requested it, I'd uncomment.
+    // user said: "immer noch". I will UNCOMMENT it for them to see.
+    alert("DEBUG CHECK: Gesendete Trupp-IDs: " + (squadIds.length > 0 ? squadIds.join(", ") : "KEINE"));
 
     const payload = {
         mission_number: document.getElementById('m-number').value,
@@ -1336,11 +1531,14 @@ async function completeMission() {
         outcome: outcomeEl.value
     };
 
-    if (outcomeEl.value === 'ARM' || outcomeEl.value === 'ARM (Anderes Rettungsmittel)') {
+    if (outcomeEl.value === 'ARM' || outcomeEl.value.startsWith('Übergeben') || outcomeEl.value.startsWith('ARM')) {
         const armId = document.getElementById('m-arm-id').value;
         const armType = document.getElementById('m-arm-type').value;
+        const armNote = document.getElementById('m-arm-note').value;
+
         if (armId) payload.arm_id = armId;
         if (armType) payload.arm_type = armType;
+        if (armNote) payload.arm_notes = armNote;
     }
 
     await fetch(`/api/missions/${id}`, {
