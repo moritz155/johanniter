@@ -1349,7 +1349,7 @@ async function submitMission(e) {
 
         // Add ARM fields if outcome matches
         const outcomeVal = payload.outcome;
-        if (outcomeVal === 'ARM' || outcomeVal.startsWith('Übergeben') || outcomeVal.startsWith('ARM')) {
+        if (outcomeVal && (outcomeVal === 'ARM' || outcomeVal.startsWith('Übergeben') || outcomeVal.startsWith('ARM'))) {
             const armId = document.getElementById('m-arm-id').value;
             const armType = document.getElementById('m-arm-type').value;
             const armNote = document.getElementById('m-arm-note').value;
