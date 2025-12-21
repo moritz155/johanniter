@@ -11,6 +11,6 @@ Feuerwehr
 Veranstalter
 
 [reason]
-Aktute Erkrankung
+Akute Erkrankung
 Verletzung
 Sonstiges

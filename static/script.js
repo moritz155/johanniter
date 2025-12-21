@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(fetchWeather, 600000); // Refresh every 10 mins
     setInterval(updateClock, 1000);
     setInterval(updateTimers, 1000);
+    checkMobile(); // Check initial view
 });
 
 async function loadData() {
@@ -77,6 +78,7 @@ async function loadData() {
             renderMissions();
             populateDatalists();
             updateLastLog();
+            renderMobileView(); // Update mobile view just in case
         }
     } catch (error) {
         console.error('Error loading data:', error);
@@ -88,6 +90,7 @@ async function startShift(e) {
     const locInfo = document.body.dataset.locInfo || "N/A";
     const loc = document.getElementById('conf-location').value;
     const addr = document.getElementById('conf-address').value;
+    const pwd = document.getElementById('conf-password').value;
     const start = document.getElementById('conf-start').value;
 
     // Default location if empty (optional)
@@ -107,6 +110,7 @@ async function startShift(e) {
             body: JSON.stringify({
                 location: finalLoc,
                 address: addr,
+                password: pwd,
                 start_time: start || null,
                 squads: squads
             })
@@ -152,6 +156,44 @@ function changeSquadCount(delta) {
 
 function openShiftSetup() {
     document.getElementById('shift-setup-modal').classList.add('open');
+    document.getElementById('conf-password').value = ''; // Reset
+}
+
+function openJoinModal() {
+    document.getElementById('join-modal').classList.add('open');
+    document.getElementById('join-password').value = '';
+}
+
+async function joinShift(e) {
+    e.preventDefault();
+    const pwd = document.getElementById('join-password').value;
+
+    if (!pwd) {
+        alert("Bitte Passwort eingeben.");
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/join', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pwd })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            closeModal('join-modal');
+            document.getElementById('welcome-screen').classList.remove('active');
+            // Reload data to sync with the session we just joined
+            loadData();
+        } else {
+            alert(data.message || "Beitritt fehlgeschlagen.");
+        }
+    } catch (error) {
+        console.error("Join error:", error);
+        alert("Verbindungsfehler beim Beitreten.");
+    }
 }
 
 // --- Guide / Tour System ---
@@ -804,7 +846,7 @@ async function submitSquad(e) {
         await fetch('/api/squads', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, qualification: qual })
+            body: JSON.stringify({ name, qualification: qual, service_numbers })
         });
     }
 
@@ -850,6 +892,50 @@ async function deleteSquad() {
 }
 
 // --- Missions ---
+
+
+
+async function saveMissionDescription(id, newDesc) {
+    // Update local data first
+    const m = missionsData.find(m => m.id === id);
+    if (m) m.description = newDesc;
+
+    try {
+        await fetch(`/api/missions/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description: newDesc })
+        });
+        console.log(`Description saved for mission ${id}`);
+    } catch (error) {
+        console.error("Error saving description:", error);
+    }
+}
+
+
+
+async function saveMissionLocation(id, newLoc) {
+    // Update local data
+    const m = missionsData.find(m => m.id === id);
+    if (m) {
+        if (!m.initial_location && m.location !== newLoc) {
+            m.initial_location = m.location; // Save old as initial
+        }
+        m.location = newLoc;
+        renderMissions(); // Re-render to show "Initial: ..." if needed
+    }
+
+    try {
+        await fetch(`/api/missions/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ location: newLoc })
+        });
+        console.log(`Location saved for mission ${id}`);
+    } catch (error) {
+        console.error("Error saving location:", error);
+    }
+}
 
 function renderMissions() {
     const container = document.getElementById('mission-list');
@@ -976,11 +1062,11 @@ function renderMissions() {
                       ${mission.status === 'Laufend' ? `style="cursor: pointer;" onclick='openCompleteMissionModal(${mission.id})' title="Einsatz abschließen"` : ''}>
                     ${mission.status}
                 </span>
-                <button class="edit-btn" onclick='editMission(${JSON.stringify(mission).replace(/'/g, "&#39;")})'>✎</button>
+                <button class="edit-btn" onclick='editMission(${mission.id})'>✎</button>
             </div>
             <div class="mission-details">
                 <div>
-                    <strong>Ort:</strong> ${mission.location}
+                    <strong>Ort:</strong> <span class="editable-note" contenteditable="true" onblur="saveMissionLocation(${mission.id}, this.innerText)" onclick="this.focus()" style="display:inline; min-width: 20px;">${mission.location}</span>
                     ${(mission.initial_location && mission.initial_location !== mission.location) ?
                 `<span class="initial-mission-loc" style="color: #666; font-size: 0.9em; margin-left: 0.5rem;">(Initial: ${mission.initial_location})</span>` : ''}
                 </div>
@@ -988,8 +1074,11 @@ function renderMissions() {
                 <div class="full-width"><strong>Trupps:</strong> <div style="display:inline-flex; gap:0.5rem; flex-wrap:wrap;">${squadsHtml}</div></div>
                 ${mission.alarming_entity ? `<div><strong>Alarm:</strong> ${mission.alarming_entity}</div>` : ''}
                 ${outcomeHtml}
-                ${mission.description ? `<div class="mission-desc full-width">${mission.description}</div>` : ''}
-                ${mission.notes ? `<div class="mission-notes full-width">Notizen: ${mission.notes}</div>` : ''}
+                ${mission.description ? `<div class="mission-desc full-width" contenteditable="true" onblur="saveMissionDescription(${mission.id}, this.innerText)" onclick="this.focus()">${mission.description}</div>` : ''}
+                <div class="mission-notes full-width" onclick="const s=this.querySelector('.editable-note'); s.focus();">
+                    <strong>Notizen:</strong> 
+                    <span class="editable-note" contenteditable="true" onblur="saveMissionNote(${mission.id}, this.innerText)">${mission.notes || ''}</span>
+                </div>
             </div>
         `;
         return card;
@@ -1086,6 +1175,7 @@ function openNewMissionModal() {
         '8': { label: 'AO', class: 's8' },
         'Pause': { label: 'Pause', class: 'sP' },
         'NEB': { label: 'NEB', class: 'sNEB' },
+        'Integriert': { label: 'Disponiert', class: 'sDip' },
         '1': { label: 'Frei', class: 's1' }
     };
 
@@ -1095,8 +1185,12 @@ function openNewMissionModal() {
 
         const st = statusMap[s.current_status] || { label: s.current_status, class: 's1' };
 
+        const isDispatched = s.current_status === 'Integriert';
+        const borderStyle = isDispatched ? 'border-color: orange; border-width: 2px;' : '';
+        const titleAttr = isDispatched ? 'title="Dieser Trupp ist bereits disponiert"' : '';
+
         div.innerHTML = `
-            <button type="button" class="squad-select-btn" data-squad-id="${s.id}" onclick="toggleSquadSelection(this)">
+            <button type="button" class="squad-select-btn" data-squad-id="${s.id}" onclick="toggleSquadSelection(this)" style="${borderStyle}" ${titleAttr}>
                 <span class="squad-name">${s.name}</span>
                 <span class="mini-status ${st.class}">${st.label}</span>
             </button>
@@ -1130,7 +1224,14 @@ function updateSquadSelectionCounter() {
     }
 }
 
-function editMission(mission) {
+function editMission(missionId) {
+    // Lookup the latest mission data (including inline notes changes)
+    const mission = missionsData.find(m => m.id === missionId);
+    if (!mission) {
+        console.error("Mission not found for edit:", missionId);
+        return;
+    }
+
     document.getElementById('new-mission-form').reset();
     document.getElementById('edit-mission-id').value = mission.id;
     document.getElementById('mission-modal-title').innerText = "Einsatz bearbeiten"; // Set Title for Edit
@@ -1160,6 +1261,7 @@ function editMission(mission) {
         '8': { label: 'AO', class: 's8' },
         'Pause': { label: 'Pause', class: 'sP' },
         'NEB': { label: 'NEB', class: 'sNEB' },
+        'Integriert': { label: 'Disponiert', class: 'sDip' },
         '1': { label: 'Frei', class: 's1' }
     };
 
@@ -1170,8 +1272,15 @@ function editMission(mission) {
 
         const st = statusMap[s.current_status] || { label: s.current_status, class: 's1' };
 
+        const isDispatched = s.current_status === 'Integriert';
+        // If selected (it's THIS mission), no warning border needed (or maybe blue?). 
+        // If not selected but dispatched (OTHER mission), warn.
+        // Actually, simple is best: Warn if integrated.
+        const borderStyle = isDispatched ? 'border-color: orange; border-width: 2px;' : '';
+        const titleAttr = isDispatched ? 'title="Dieser Trupp ist bereits disponiert"' : '';
+
         div.innerHTML = `
-            <button type="button" class="squad-select-btn ${isSelected ? 'selected' : ''}" data-squad-id="${s.id}" onclick="toggleSquadSelection(this)">
+            <button type="button" class="squad-select-btn ${isSelected ? 'selected' : ''}" data-squad-id="${s.id}" onclick="toggleSquadSelection(this)" style="${borderStyle}" ${titleAttr}>
                 <span class="squad-name">${s.name}</span>
                 <span class="mini-status ${st.class}">${st.label}</span>
             </button>
@@ -1855,3 +1964,103 @@ async function handleMissionDrop(e, mission) {
         alert("Fehler beim Zuweisen des Trupps.");
     }
 }
+
+// --- Mobile View Logic ---
+
+function checkMobile() {
+    // Check if width is less than 768px (common tablet breakdown) OR user explicitly requested mobile
+    const isMobile = window.innerWidth <= 768; // Simple width check for now
+
+    const desktopContainer = document.getElementById('desktop-view-container');
+    const mobileContainer = document.getElementById('mobile-view-container');
+
+    if (isMobile) {
+        if (desktopContainer) desktopContainer.classList.add('hidden');
+        if (mobileContainer) mobileContainer.classList.remove('hidden');
+        renderMobileView();
+    } else {
+        if (desktopContainer) desktopContainer.classList.remove('hidden');
+        if (mobileContainer) mobileContainer.classList.add('hidden');
+    }
+}
+
+function renderMobileView() {
+    const list = document.getElementById('mobile-squad-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    squadsData.forEach(squad => {
+        const btn = document.createElement('button');
+        btn.className = 'mobile-squad-btn';
+
+        // Status Class
+        const statusMap = {
+            '2': { label: 'EB', class: 's2' },
+            '3': { label: 'zBO', class: 's3' },
+            '4': { label: 'BO', class: 's4' },
+            '7': { label: 'zAO', class: 's7' },
+            '8': { label: 'AO', class: 's8' },
+            'Pause': { label: 'P', class: 'sP' },
+            'NEB': { label: 'NEB', class: 'sNEB' },
+            'Integriert': { label: 'Disp.', class: 'sDip' },
+            '1': { label: 'Frei', class: 's1' }
+        };
+        const st = statusMap[squad.current_status] || { label: squad.current_status, class: 's1' };
+
+        btn.innerHTML = `
+            <span class="squad-name">${squad.name}</span>
+            <span class="status-indicator ${st.class}">${st.label}</span>
+        `;
+
+        btn.onclick = () => showMobileSquadMissions(squad);
+        list.appendChild(btn);
+    });
+}
+
+function showMobileSquadMissions(squad) {
+    const overlay = document.getElementById('mobile-mission-overlay');
+    const title = document.getElementById('mobile-overlay-title');
+    const list = document.getElementById('mobile-mission-list');
+
+    if (title) title.innerText = squad.name;
+    list.innerHTML = '';
+
+    // Filter Active Missions for this Squad
+    // Filter logic same as backend or desktop: active missions where this squad is assigned
+    // Mission.squad_ids contains IDs.
+
+    const activeMissions = missionsData.filter(m =>
+        m.squad_ids && m.squad_ids.includes(squad.id) &&
+        m.status !== 'Abgeschlossen' &&
+        m.status !== 'Storniert' &&
+        m.status !== 'Intervention unterblieben'
+    );
+
+    if (activeMissions.length === 0) {
+        list.innerHTML = '<div class="mobile-empty-msg">Keine aktiven Einsätze.</div>';
+    } else {
+        activeMissions.forEach(m => {
+            const card = document.createElement('div');
+            card.className = 'mobile-mission-card';
+
+            // Simple Read-Only View
+            card.innerHTML = `
+                <h3><span>#${m.mission_number || m.id}</span> <span style="font-size:0.8em; color:#888">${m.status}</span></h3>
+                <div class="mobile-mission-row"><strong>Ort:</strong> ${m.location}</div>
+                <div class="mobile-mission-row"><strong>Stichwort:</strong> ${m.reason}</div>
+                ${m.description ? `<div class="mobile-mission-row"><strong>Lage:</strong> ${m.description}</div>` : ''}
+                ${m.notes ? `<div class="mobile-mission-row"><strong>Notizen:</strong> ${m.notes}</div>` : ''}
+             `;
+            list.appendChild(card);
+        });
+    }
+
+    overlay.classList.remove('hidden');
+}
+
+function closeMobileMissionOverlay() {
+    document.getElementById('mobile-mission-overlay').classList.add('hidden');
+}
+
+// Add Resize Listener
+window.addEventListener('resize', checkMobile);

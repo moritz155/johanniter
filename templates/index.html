@@ -19,11 +19,12 @@
 
                 <div class="welcome-actions">
                     <button class="btn-welcome-primary" onclick="openShiftSetup()">
-
                         Neuer Dienst
                     </button>
+                    <button class="btn-welcome-secondary" onclick="openJoinModal()">
+                        Beitreten
+                    </button>
                     <button class="btn-welcome-secondary" onclick="openTutorial()">
-
                         Tutorial
                     </button>
                 </div>
@@ -51,6 +52,13 @@
                     <label>Adresse (Optional)</label>
                     <input type="text" id="conf-address" placeholder="Musterstraße 1">
                 </div>
+                <!-- Password Field -->
+                <div class="form-group">
+                    <label>Passwort (für Beitritt von anderen Geräten)</label>
+                    <input type="password" id="conf-password" placeholder="Passwort festlegen" required>
+                    <small>Dieses Passwort wird benötigt, um dem Dienst beizutreten.</small>
+                </div>
+
                 <div class="form-group">
                     <label>Dienstbeginn (Optional)</label>
                     <input type="datetime-local" id="conf-start">
@@ -69,6 +77,25 @@
 
                 <div style="text-align: right;">
                     <button type="submit" class="btn-primary">Dienst starten</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Join Modal -->
+    <div id="join-modal" class="modal">
+        <div class="modal-content small-modal">
+            <div class="modal-header">
+                <h2>Dienst beitreten</h2>
+                <button class="close-btn" onclick="closeModal('join-modal')">&times;</button>
+            </div>
+            <form id="join-form" onsubmit="joinShift(event)">
+                <div class="form-group">
+                    <label>Passwort</label>
+                    <input type="password" id="join-password" placeholder="Dienst-Passwort eingeben" required>
+                </div>
+                <div style="text-align: right;">
+                    <button type="submit" class="btn-primary">Beitreten</button>
                 </div>
             </form>
         </div>
@@ -168,101 +195,126 @@
         </div>
     </div>
 
-    <header>
-        <div class="header-left">
-            <div class="header-title-row">
-                <h1>Einsatzleitung</h1>
-                <button id="btn-config" class="icon-btn header-icon-btn" onclick="openConfigModal()"
-                    title="Dienst bearbeiten">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path
-                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
-                        </path>
-                    </svg>
-                </button>
-                <button id="btn-help" class="icon-btn header-icon-btn" onclick="openTutorial()"
-                    title="Hilfe / Tutorial">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                    </svg>
-                </button>
-                <button id="btn-theme-toggle" class="icon-btn header-icon-btn" onclick="toggleTheme()"
-                    title="Dark/Light Mode">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                    </svg>
-                </button>
-                <button id="btn-color-picker" class="icon-btn header-icon-btn"
-                    onclick="document.getElementById('theme-color-input').click()" title="Farbe ändern">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <circle cx="13.5" cy="6.5" r=".5"></circle>
-                        <circle cx="17.5" cy="10.5" r=".5"></circle>
-                        <circle cx="8.5" cy="7.5" r=".5"></circle>
-                        <circle cx="6.5" cy="12.5" r=".5"></circle>
-                        <path
-                            d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.063 0-1.125.75-2.062 1.688-2.062H18c2.25 0 4-1.75 4-4V8c0-5.5-4.5-6-10-6z">
-                        </path>
-                    </svg>
-                </button>
-                <input type="color" id="theme-color-input" style="display:none;" onchange="setHeaderColor(this.value)">
+    <div id="desktop-view-container">
+        <header>
+            <div class="header-left">
+                <div class="header-title-row">
+                    <h1>Einsatzleitung</h1>
+                    <button id="btn-config" class="icon-btn header-icon-btn" onclick="openConfigModal()"
+                        title="Dienst bearbeiten">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                            </path>
+                        </svg>
+                    </button>
+                    <button id="btn-help" class="icon-btn header-icon-btn" onclick="openTutorial()"
+                        title="Hilfe / Tutorial">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </button>
+                    <button id="btn-theme-toggle" class="icon-btn header-icon-btn" onclick="toggleTheme()"
+                        title="Dark/Light Mode">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                    </button>
+                    <button id="btn-color-picker" class="icon-btn header-icon-btn"
+                        onclick="document.getElementById('theme-color-input').click()" title="Farbe ändern">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="13.5" cy="6.5" r=".5"></circle>
+                            <circle cx="17.5" cy="10.5" r=".5"></circle>
+                            <circle cx="8.5" cy="7.5" r=".5"></circle>
+                            <circle cx="6.5" cy="12.5" r=".5"></circle>
+                            <path
+                                d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.063 0-1.125.75-2.062 1.688-2.062H18c2.25 0 4-1.75 4-4V8c0-5.5-4.5-6-10-6z">
+                            </path>
+                        </svg>
+                    </button>
+                    <input type="color" id="theme-color-input" style="display:none;"
+                        onchange="setHeaderColor(this.value)">
+                </div>
+                <span id="shift-location" class="subtitle"></span>
             </div>
-            <span id="shift-location" class="subtitle"></span>
+
+            <div class="header-center">
+                <div class="time-container">
+                    <div id="clock" class="clock">--:--:--</div>
+                    <div id="date" class="date">--.--.----</div>
+                </div>
+                <div id="weather-widget" class="weather-widget hidden">
+                    <span id="weather-icon" class="weather-icon"></span>
+                    <span id="weather-temp" class="weather-temp">--°C</span>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <button id="btn-log" onclick="openLogModal()">Protokoll</button>
+                <button id="btn-export" onclick="openExportModal()">Exportieren</button>
+                <button id="btn-end-shift" onclick="endShift()" class="btn-danger">Dienst beenden</button>
+            </div>
+        </header>
+
+        <main>
+            <!-- Squad Panel -->
+            <section class="squad-panel">
+                <div class="panel-header">
+                    <span>Trupp-Übersicht</span>
+                    <button class="btn-gray" onclick="openSquadModal()">+ Neuer Trupp</button>
+                </div>
+                <div id="squad-list" class="squad-list">
+                    <!-- Squads loaded here -->
+                </div>
+            </section>
+
+            <!-- Mission Panel -->
+            <section class="mission-panel">
+                <div class="panel-header" id="mission-panel-header">
+                    <span>Einsatztagebuch <span id="mission-stats"></span></span>
+                    <button class="btn-gray" onclick="openNewMissionModal()">+ Neuer Einsatz</button>
+                </div>
+                <div id="mission-list" class="mission-list">
+                    <!-- Missions loaded here -->
+                </div>
+            </section>
+        </main>
+
+        <!-- Logs / Ticker Bar -->
+        <footer id="ticker-bar">
+            <span>Letzte Änderung: <span id="last-log">...</span></span>
+            <span class="ticker-copyright">&copy; Noah Elvis Oberkofler & Moritz Schelten</span>
+        </footer>
+    </div>
+
+    <!-- Mobile View Container -->
+    <div id="mobile-view-container" class="hidden">
+        <header class="mobile-header">
+            <h1>Trupp-Modus</h1>
+            <!-- Maybe a way to switch back or see title -->
+        </header>
+        <div id="mobile-squad-list" class="mobile-squad-list">
+            <!-- Big Buttons for Squads go here -->
         </div>
 
-        <div class="header-center">
-            <div class="time-container">
-                <div id="clock" class="clock">--:--:--</div>
-                <div id="date" class="date">--.--.----</div>
+        <!-- Mobile Mission View (Overlay) -->
+        <div id="mobile-mission-overlay" class="mobile-overlay hidden">
+            <div class="mobile-overlay-header">
+                <button class="back-btn" onclick="closeMobileMissionOverlay()">← Zurück</button>
+                <h2 id="mobile-overlay-title">Trupp X</h2>
             </div>
-            <div id="weather-widget" class="weather-widget hidden">
-                <span id="weather-icon" class="weather-icon"></span>
-                <span id="weather-temp" class="weather-temp">--°C</span>
+            <div id="mobile-mission-list" class="mobile-mission-list">
+                <!-- Active Missions for Squad go here -->
             </div>
         </div>
-
-        <div class="header-actions">
-            <button id="btn-log" onclick="openLogModal()">Protokoll</button>
-            <button id="btn-export" onclick="openExportModal()">Exportieren</button>
-            <button id="btn-end-shift" onclick="endShift()" class="btn-danger">Dienst beenden</button>
-        </div>
-    </header>
-
-    <main>
-        <!-- Squad Panel -->
-        <section class="squad-panel">
-            <div class="panel-header">
-                <span>Trupp-Übersicht</span>
-                <button class="btn-gray" onclick="openSquadModal()">+ Neuer Trupp</button>
-            </div>
-            <div id="squad-list" class="squad-list">
-                <!-- Squads loaded here -->
-            </div>
-        </section>
-
-        <!-- Mission Panel -->
-        <section class="mission-panel">
-            <div class="panel-header" id="mission-panel-header">
-                <span>Einsatztagebuch <span id="mission-stats"></span></span>
-                <button class="btn-gray" onclick="openNewMissionModal()">+ Neuer Einsatz</button>
-            </div>
-            <div id="mission-list" class="mission-list">
-                <!-- Missions loaded here -->
-            </div>
-        </section>
-    </main>
-
-    <!-- Logs / Ticker Bar -->
-    <footer id="ticker-bar">
-        <span>Letzte Änderung: <span id="last-log">...</span></span>
-        <span class="ticker-copyright">&copy; Noah Elvis Oberkofler & Moritz Schelten</span>
-    </footer>
+    </div>
 
     <!-- New Mission Modal -->
     <div id="new-mission-modal" class="modal">
@@ -380,7 +432,7 @@
                 <h2 id="squad-modal-title">Neuer Trupp</h2>
                 <button class="close-btn" onclick="closeModal('squad-modal')">&times;</button>
             </div>
-            <form id="s-form">
+            <form id="s-form" onsubmit="submitSquad(event)">
                 <input type="hidden" id="s-id">
                 <div class="form-group">
                     <label>Name</label>
@@ -596,7 +648,7 @@
     </div>
 
     <div id="guide-overlay" class="guide-overlay"></div>
-    <script src="{{ url_for('static', filename='script.js') }}?v=FIX_EDIT_v1"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v={{ last_updated }}"></script>
     <script>
         // Inline Weather Script for maximum reliability
 

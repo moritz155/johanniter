@@ -332,9 +332,16 @@ main {
     cursor: pointer;
 }
 
+#desktop-view-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
 .squad-list {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 0.5rem;
 }
 
@@ -897,6 +904,8 @@ body.dark-mode .squad-select-btn.selected {
     border-radius: 4px;
     font-size: 0.95rem;
     white-space: pre-wrap;
+    outline: none;
+    /* No border when editing */
 }
 
 .mission-notes {
@@ -905,6 +914,35 @@ body.dark-mode .squad-select-btn.selected {
     color: #666;
     border-top: 1px dashed #ddd;
     padding-top: 0.25rem;
+    display: flex;
+    gap: 0.3rem;
+    cursor: text;
+    /* Show cursor on whole row */
+}
+
+/* Hover effect on the container to indicate interactivity */
+.mission-notes:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+    /* subtle highlight */
+}
+
+
+
+/* When the span inside is empty or not, make it fill space */
+.editable-note {
+    outline: none;
+    cursor: text;
+    flex: 1;
+    /* Take remaining space */
+    min-width: 10px;
+}
+
+
+
+.editable-note:empty:before {
+    content: " ";
+    /* Ensure clickable space if empty */
+    white-space: pre;
 }
 
 /* Ticker */
@@ -1457,7 +1495,275 @@ button.guide-highlight {
     }
 }
 
-/* Tutorial Carousel Styles */
+/* --- Mobile Welcome Screen Optimizations --- */
+@media (max-width: 768px) {
+    .welcome-screen {
+        flex-direction: column;
+        background-image: url('/static/mobile-bg.jpg');
+        /* New Mobile Background */
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+    }
+
+    /* Add overlay to ensure text readability */
+    .welcome-left {
+        width: 100%;
+        height: 100vh;
+        /* Full viewport height */
+        padding: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        background-color: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(4px);
+    }
+
+    .welcome-right {
+        display: none;
+        /* Hide image on mobile to save space */
+    }
+
+    .welcome-content h1 {
+        font-size: 2.5rem;
+        /* Readable large title */
+        margin-bottom: 1rem;
+    }
+
+    .welcome-subtitle {
+        font-size: 1.2rem;
+        margin-bottom: 2rem;
+    }
+
+    .welcome-actions {
+        flex-direction: column;
+        /* Stack buttons */
+        width: 100%;
+        gap: 1rem;
+    }
+
+    .btn-welcome-primary,
+    .btn-welcome-secondary {
+        width: 100%;
+        /* Full width buttons */
+        padding: 1rem;
+        font-size: 1.2rem;
+        /* Larger touch targets */
+        margin: 0;
+    }
+}
+
+
+/* --- Mobile View Styles --- */
+#mobile-view-container {
+    width: 100%;
+    height: 100vh;
+    background: #f0f2f5;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#mobile-view-container.hidden {
+    display: none !important;
+}
+
+#desktop-view-container.hidden {
+    display: none !important;
+}
+
+.mobile-header {
+    background: var(--primary);
+    color: white;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    flex-shrink: 0;
+}
+
+.mobile-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.mobile-squad-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    /* Stack vertically for easy tapping */
+    gap: 1rem;
+}
+
+.mobile-squad-btn {
+    appearance: none;
+    border: none;
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #333;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mobile-squad-btn:active {
+    transform: scale(0.98);
+}
+
+.mobile-squad-btn .status-indicator {
+    font-size: 1rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    background: #eee;
+    color: #555;
+    font-weight: normal;
+}
+
+/* Specific status colors */
+.mobile-squad-btn .status-indicator.s2 {
+    background: var(--c-2);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.s3 {
+    background: var(--c-3);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.s4 {
+    background: var(--c-4);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.s7 {
+    background: var(--c-7);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.s8 {
+    background: var(--c-8);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.sP {
+    background: var(--c-P);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.sNEB {
+    background: var(--c-NEB);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.sDip {
+    background: var(--c-Dip);
+    color: black;
+}
+
+/* Mobile Overlay */
+.mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: white;
+    z-index: 3000;
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.3s ease;
+}
+
+.mobile-overlay.hidden {
+    display: none;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(100%);
+    }
+
+    to {
+        transform: translateY(0);
+    }
+}
+
+.mobile-overlay-header {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.mobile-overlay-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    flex: 1;
+}
+
+.back-btn {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    color: var(--primary);
+    font-weight: bold;
+    padding: 0.5rem;
+    cursor: pointer;
+}
+
+.mobile-mission-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.mobile-mission-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.mobile-mission-card h3 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    color: var(--primary);
+    display: flex;
+    justify-content: space-between;
+}
+
+.mobile-mission-row {
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+}
+
+.mobile-mission-row strong {
+    display: block;
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 0.1rem;
+}
+
+.mobile-empty-msg {
+    text-align: center;
+    color: #666;
+    margin-top: 2rem;
+    font-style: italic;
+}
+
 .tutorial-body {
     min-height: 300px;
     display: flex;
@@ -1765,4 +2071,43 @@ button.guide-highlight {
 .weather-widget:hover {
     transform: scale(1.05);
     background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Inline Mission Notes */
+.inline-mission-note {
+    width: 100%;
+    min-height: 2.5em;
+    /* Enough for 1-2 lines */
+    background-color: transparent;
+    border: 1px dashed transparent;
+    border-radius: 4px;
+    padding: 0.3rem;
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: inherit;
+    resize: vertical;
+    transition: border-color 0.2s, background-color 0.2s;
+    margin-top: 0.5rem;
+}
+
+.inline-mission-note:hover {
+    border-color: #ccc;
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.inline-mission-note:focus {
+    border-color: var(--primary);
+    background-color: var(--surface);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(211, 47, 47, 0.1);
+}
+
+body.dark-mode .inline-mission-note:hover {
+    border-color: #555;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+body.dark-mode .inline-mission-note:focus {
+    border-color: var(--primary);
+    background-color: #1e1e1e;
 }
