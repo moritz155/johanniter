@@ -17,6 +17,18 @@ def migrate():
             print("Migration successful.")
         else:
             print("Column password_hash already exists.")
+
+        # Check for Squad access_token
+        cursor.execute("PRAGMA table_info(squad)")
+        squad_columns = [info[1] for info in cursor.fetchall()]
+
+        if 'access_token' not in squad_columns:
+            print("Migrating: Adding access_token to squad...")
+            cursor.execute("ALTER TABLE squad ADD COLUMN access_token VARCHAR(36)")
+            conn.commit()
+            print("Migration of squad successful.")
+        else:
+            print("Column access_token already exists in squad.")
             
         conn.close()
     except Exception as e:

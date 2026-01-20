@@ -1,7 +1,7 @@
 # Mission Control - Backend (Reload Triggered)
 from flask import Flask, render_template, request, jsonify, send_file, session
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timezone
 import io
 import csv
 import os
@@ -16,6 +16,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import io
 from werkzeug.security import generate_password_hash, check_password_hash
+from messages import LogMessages
 
 app = Flask(__name__)
 app.secret_key = 'dev-secret-key-change-in-prod' # Necessary for session
@@ -47,21 +48,25 @@ class ShiftConfig(db.Model):
             'address': self.address,
             'start_time': (self.start_time.isoformat() + 'Z') if self.start_time else None,
             'end_time': (self.end_time.isoformat() + 'Z') if self.end_time else None,
-            'is_active': self.is_active
+            'is_active': self.is_active,
+            'session_id': self.session_id # Expose for client-side storage
         }
 
 class Squad(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), nullable=False)
+    type = db.Column(db.String(20), default='Trupp')  # New: 'Trupp' or 'Ambulanz'
     qualification = db.Column(db.String(20), default='San') # San, RS, NFS, NA
     current_status = db.Column(db.String(20), default='2') # 2 (EB), 3, 4, 7, 8
     position = db.Column(db.Integer, default=0)
     service_numbers = db.Column(db.String(200), nullable=True) # Comma-seperated list
     custom_location = db.Column(db.String(200), nullable=True) # Manual override
     session_id = db.Column(db.String(100), nullable=False)
+    access_token = db.Column(db.String(36), nullable=True) # QR-Code Login Token
 
     __table_args__ = (db.UniqueConstraint('name', 'session_id', name='_name_session_uc'),)
     last_status_change = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     missions = db.relationship('Mission', secondary=mission_squad, back_populates='squads')
@@ -84,7 +89,8 @@ class Squad(db.Model):
                 'id': m.id,
                 'mission_number': m.mission_number,
                 'location': m.location,
-                'reason': m.reason
+                'reason': m.reason,
+                'squad_ids': [s.id for s in m.squads]
             }
 
         # Find LAST mission (any status, sorted by time)
@@ -107,9 +113,18 @@ class Squad(db.Model):
         elif last_mission:
             current_location_display = last_mission['location']
 
+        # Calculate patient count for Ambulanz (active missions assigned)
+        patient_count = 0
+        if self.type == 'Ambulanz':
+            # Count active missions (assuming active means not deleted/cancelled/completed)
+            # Active mission usually means status != 'Abgeschlossen'
+            # Also self.missions contains ALL missions.
+            patient_count = sum(1 for m in self.missions if not m.is_deleted and m.status != 'Abgeschlossen')
+
         return {
             'id': self.id,
             'name': self.name,
+            'type': self.type, 
             'qualification': self.qualification,
             'service_numbers': self.service_numbers,
             'custom_location': self.custom_location,
@@ -117,8 +132,11 @@ class Squad(db.Model):
             'current_status': self.current_status,
             'position': self.position,
             'last_status_change': (self.last_status_change.isoformat() + 'Z') if self.last_status_change else None,
+            'updated_at': (self.updated_at.isoformat() + 'Z') if self.updated_at else None,
             'active_mission': active_mission,
-            'last_mission': last_mission
+            'last_mission': last_mission,
+            'access_token': self.access_token,
+            'patient_count': patient_count 
         }
 
 class Mission(db.Model):
@@ -136,6 +154,7 @@ class Mission(db.Model):
     arm_notes = db.Column(db.String(500), nullable=True) # Zusätzliche Notiz für Übergabe
     notes = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     session_id = db.Column(db.String(100), nullable=False)
     
     # Soft Delete
@@ -162,7 +181,8 @@ class Mission(db.Model):
             'arm_type': self.arm_type,
             'arm_notes': self.arm_notes,
             'notes': self.notes,
-            'created_at': (self.created_at.isoformat() + 'Z') if self.created_at else None
+            'created_at': (self.created_at.isoformat() + 'Z') if self.created_at else None,
+            'updated_at': (self.updated_at.isoformat() + 'Z') if self.updated_at else None
         }
 
 class LogEntry(db.Model):
@@ -177,7 +197,7 @@ class LogEntry(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
-            'timestamp': self.timestamp.isoformat(),
+            'timestamp': (self.timestamp.isoformat() + 'Z') if self.timestamp else None,
             'action': self.action,
             'details': self.details,
             'mission_id': self.mission_id,
@@ -205,6 +225,14 @@ STATUS_MAP = {
 }
 
 def get_session_id():
+    # Priority: 1. Header (Robustness), 2. Cookie (Standard)
+    header_sid = request.headers.get('X-Session-ID')
+    if header_sid:
+         # Optionally set it in cookie for sync
+         if 'user_id' not in session or session['user_id'] != header_sid:
+             session['user_id'] = header_sid
+         return header_sid
+
     if 'user_id' not in session:
         session['user_id'] = str(uuid.uuid4())
     return session['user_id']
@@ -219,6 +247,31 @@ def log_action(action, details, mission_id=None, squad_id=None):
     )
     db.session.add(entry)
     db.session.commit()
+
+def update_ambulanz_occupancy(squad):
+    """
+    Checks if the squad is an Ambulanz and updates its status to '4' (Besetzt)
+    if it has active missions.
+    """
+    if squad.type != 'Ambulanz':
+        return
+
+    # Count active missions
+    active_count = sum(1 for m in squad.missions if not m.is_deleted and m.status != 'Abgeschlossen')
+    
+    if active_count > 0:
+        if squad.current_status not in ['4', '3']: # If not already busy
+            squad.current_status = '4'
+            squad.last_status_change = datetime.utcnow()
+            db.session.commit()
+            log_action('STATUS', f"{squad.name}: {LogMessages.STATUS_AUTO_BUSY}", squad_id=squad.id)
+    else:
+        # Auto-Free if currently Besetzt (4)
+        if squad.current_status == '4':
+            squad.current_status = '2'
+            squad.last_status_change = datetime.utcnow()
+            db.session.commit()
+            log_action('STATUS', f"{squad.name}: {LogMessages.STATUS_AUTO_FREE}", squad_id=squad.id)
 
 # --- Error Handling ---
 @app.errorhandler(Exception)
@@ -248,6 +301,17 @@ def get_init_data():
     config = ShiftConfig.query.filter_by(is_active=True, session_id=sid).first()
     
     squads = Squad.query.filter_by(session_id=sid).order_by(Squad.position).all()
+    
+    # Self-Healing: Ensure all squads have access_token
+    token_update_needed = False
+    for s in squads:
+        if not s.access_token:
+            s.access_token = str(uuid.uuid4())
+            token_update_needed = True
+    
+    if token_update_needed:
+        db.session.commit()
+    
     # Filter out deleted missions
     missions = Mission.query.filter_by(session_id=sid, is_deleted=False).order_by(Mission.created_at.desc()).all()
     
@@ -273,15 +337,59 @@ def get_init_data():
 @app.route('/api/updates', methods=['GET'])
 def get_updates():
     try:
-        sid = get_session_id()
-        # simplified long polling check
-        squads = Squad.query.filter_by(session_id=sid).order_by(Squad.position).all()
-        missions = Mission.query.filter_by(session_id=sid, is_deleted=False).order_by(Mission.created_at.desc()).all()
-        logs = LogEntry.query.filter_by(session_id=sid).order_by(LogEntry.timestamp.desc()).limit(50).all()
+        # Support Token (Mobile)
+        token = request.args.get('token')
+        sid = None
         
+        if token:
+            sq = Squad.query.filter_by(access_token=token).first()
+            if sq:
+                sid = sq.session_id
+            else:
+                 # Invalid token, but maybe just fall back to session?
+                 pass 
+        
+        if not sid:
+            sid = get_session_id()
+
+        # simplified long polling check
+        squad_query = Squad.query.filter_by(session_id=sid)
+        mission_query = Mission.query.filter_by(session_id=sid, is_deleted=False)
+        log_query = LogEntry.query.filter_by(session_id=sid)
+
+        since = request.args.get('since')
+        if since:
+            try:
+                # Handle JS toISOString Z suffix
+                if since.endswith('Z'):
+                    since = since[:-1]
+                limit_dt = datetime.fromisoformat(since)
+                
+                squad_query = squad_query.filter(Squad.updated_at > limit_dt)
+                mission_query = mission_query.filter(Mission.updated_at > limit_dt)
+                log_query = log_query.filter(LogEntry.timestamp > limit_dt)
+            except ValueError:
+                pass # Ignore invalid timestamp
+
+        squads = squad_query.order_by(Squad.position).all()
+        missions = mission_query.order_by(Mission.created_at.desc()).all()
+        logs = log_query.order_by(LogEntry.timestamp.desc()).limit(50).all()
+        
+        # Restore Config & Options (Critical for Frontend)
+        config = ShiftConfig.query.filter_by(session_id=sid, is_active=True).first()
+        
+        opts = PredefinedOption.query.filter_by(session_id=sid).all()
+        options_map = {}
+        for o in opts:
+            if o.category not in options_map:
+                options_map[o.category] = []
+            options_map[o.category].append(o.value)
+
         return jsonify({
+            'config': config.to_dict() if config else None,
             'squads': [s.to_dict() for s in squads],
             'missions': [m.to_dict() for m in missions],
+            'options': options_map, 
             'logs': [l.to_dict() for l in logs]
         })
     except Exception as e:
@@ -361,11 +469,16 @@ def save_config():
         # Ideally, we should clean them up, but SQLite might leave them.
         
         for s in data['squads']:
-            new_squad = Squad(name=s['name'], qualification=s.get('qualification', 'San'), session_id=sid)
+            new_squad = Squad(
+                name=s['name'], 
+                qualification=s.get('qualification', 'San'), 
+                session_id=sid,
+                access_token=str(uuid.uuid4())
+            )
             db.session.add(new_squad)
 
     db.session.commit()
-    log_action('KONFIGURATION', f"Dienst gestartet. Ort: {new_config.location}")
+    log_action('KONFIGURATION', LogMessages.SHIFT_STARTED.format(location=new_config.location))
     return jsonify(new_config.to_dict())
 
 @app.route('/api/join', methods=['POST'])
@@ -390,7 +503,12 @@ def join_session():
             # Link this user to the session
             session['user_id'] = found_config.session_id
             session.modified = True 
-            return jsonify({"success": True, "message": "Joined successfully"})
+            return jsonify({
+                "success": True, 
+                "message": "Joined successfully",
+                "session_id": found_config.session_id,
+                "config": found_config.to_dict()
+            })
         else:
             return jsonify({"success": False, "message": "Kein aktiver Dienst mit diesem Passwort gefunden"}), 404
     except Exception as e:
@@ -439,7 +557,7 @@ def update_config():
             
     if changes:
         db.session.commit()
-        log_action('KONFIGURATION', f"Einstellungen geändert: {', '.join(changes)}")
+        log_action('KONFIGURATION', LogMessages.CONFIG_CHANGED.format(changes=', '.join(changes)))
     
     # Handle locations import
     if 'locations' in data and data['locations']:
@@ -469,13 +587,15 @@ def create_squad():
     squad = Squad(
         name=data['name'], 
         qualification=data.get('qualification', 'San'), 
+        type=data.get('type', 'Trupp'),
         service_numbers=data.get('service_numbers'),
-        session_id=sid
+        session_id=sid,
+        access_token=str(uuid.uuid4())
     )
     db.session.add(squad)
     db.session.commit()
     dn_text = f", DN: {squad.service_numbers}" if squad.service_numbers else ""
-    log_action('TRUPP NEU', f"{squad.name} ({squad.qualification}){dn_text} erstellt", squad_id=squad.id)
+    log_action('TRUPP NEU', LogMessages.SQUAD_CREATED.format(name=squad.name, qualification=squad.qualification, numbers=squad.service_numbers or "keine"), squad_id=squad.id)
     return jsonify(squad.to_dict()), 201
 
 @app.route('/api/squads/<int:id>', methods=['PUT'])
@@ -486,28 +606,21 @@ def update_squad(id):
     
     changes = []
     if 'name' in data and data['name'] != squad.name:
-        changes.append(f"Name von {squad.name} auf {data['name']} geändert")
+        changes.append(f"Name: {data['name']}")
         squad.name = data['name']
         
     if 'qualification' in data and data['qualification'] != squad.qualification:
-        changes.append(f"Qualifikation von {squad.qualification} auf {data['qualification']} geändert")
+        changes.append(f"Qual: {data['qualification']}")
         squad.qualification = data.get('qualification')
 
     if 'service_numbers' in data and data['service_numbers'] != squad.service_numbers:
-        old_val = squad.service_numbers or "keine"
         new_val = data.get('service_numbers') or "keine"
-        changes.append(f"Dienstnummern von {old_val} auf {new_val} geändert")
+        changes.append(f"DN: {new_val}")
         squad.service_numbers = data.get('service_numbers')
 
     if 'custom_location' in data:
-         # Handle empty string as None
          new_val = data['custom_location'].strip() if data['custom_location'] else None
-         
-         # Logic Split based on User Request:
-         # "Wenn bei Status zBO oder BO der Standort manuell geändert wird, soll sich der EINSATZORT ändern"
-         # Status 3 (zBO), 4 (BO)
          if squad.current_status in ['3', '4'] and new_val:
-             # Find active mission to update
              active_mission = None
              for m in squad.missions:
                  if m.status != 'Abgeschlossen' and not m.is_deleted:
@@ -516,32 +629,24 @@ def update_squad(id):
              
              if active_mission:
                  old_mission_loc = active_mission.location
-                 
-                 # Save initial location if not already saved (First Edit)
                  if active_mission.initial_location is None:
                      active_mission.initial_location = old_mission_loc
                  
                  active_mission.location = new_val
-                 # Refined Log: "Bei TRUPP UPDATE (für gesamten einstz) weg lassen und das erste Trupp acuh weglassen"
-                 changes.append(f"Einsatzort durch {squad.name} aktualisiert: Von {old_mission_loc} auf {new_val} geändert")
-                 # Ensure custom_location is NOT set for standard behavior in this case
+                 changes.append(f"Einsatzort: {new_val} (via Trupp)")
                  squad.custom_location = None
-                 # Commit done below
              else:
-                 # Fallback if no active mission found (shouldn't happen in 3/4 but safe fallback)
                  squad.custom_location = new_val
          else:
-             # Standard behavior for other statuses (7, 8, 2, etc.)
              if new_val != squad.custom_location:
-                 old_loc = squad.custom_location or "(Automatisch)"
                  new_loc = new_val or "(Automatisch)"
-                 changes.append(f"Manueller Standort für Trupp geändert: Von {old_loc} auf {new_loc}")
+                 changes.append(f"Standort: {new_loc}")
                  squad.custom_location = new_val
 
 
     if changes:
         db.session.commit()
-        log_action('TRUPP UPDATE', f"{squad.name} bearbeitet: {'; '.join(changes)}", squad_id=squad.id)
+        log_action('TRUPP UPDATE', LogMessages.SQUAD_UPDATED.format(name=squad.name, changes='; '.join(changes)), squad_id=squad.id)
         
     return jsonify(squad.to_dict())
 
@@ -578,71 +683,88 @@ def delete_squad(id):
     db.session.delete(squad)
     db.session.commit()
     
-    log_action('TRUPP GELÖSCHT', f"{name}")
+    log_action('TRUPP GELÖSCHT', LogMessages.SQUAD_REMOVED.format(name=name))
     return jsonify({'status': 'deleted'})
 
 @app.route('/api/squads/<int:id>/status', methods=['POST'])
 def update_squad_status(id):
-    sid = get_session_id()
-    squad = Squad.query.filter_by(id=id, session_id=sid).first_or_404()
+    # Support Token-Based Auth for Mobile (Fallback)
+    token = request.args.get('token')
+    if token:
+        squad = Squad.query.filter_by(id=id, access_token=token).first_or_404()
+        # CRITICAL: Restore session context for log_action and other logic
+        session['user_id'] = squad.session_id
+        session.modified = True
+    else:
+        sid = get_session_id()
+        squad = Squad.query.filter_by(id=id, session_id=sid).first_or_404()
+    
     data = request.json
     new_status = data.get('status')
     
     if new_status and new_status != squad.current_status:
+        # VALIDATION FOR AMBULANZ
+        if squad.type == 'Ambulanz':
+            allowed_ambulanz_statuses = ['2', 'NEB', '4', '3']
+            if new_status not in allowed_ambulanz_statuses:
+                pass 
+
         old_status = squad.current_status
         squad.current_status = new_status
         squad.last_status_change = datetime.utcnow()
         
         # Auto-Clear Custom Location Logic refined
-        # User Request: "wenn der Standort in zAO oder AO geändert wird soll der ... bestehen bleiben"
-        # Implication: We DO NOT clear custom_location when entering 7/8.
-        # It is cleared only on Mission Assignment (Integriert).
-        
-        # User Request: "wenn auf Status EB (2) gewechselt wird, soll der letzte Standort angezeigt bleiben"
         if new_status == '2':
             # Find active mission context
             target_mission = None
-            
-            # 1. Search Active
             for m in squad.missions:
                 if m.status != 'Abgeschlossen' and not m.is_deleted:
                     target_mission = m
                     break
             
-            # 2. If no active, search Last Completed (to handle "Mission closed -> Status 2" flow)
             if not target_mission:
-                # Get all missions, filter for this squad (relationship), sort by ID desc
-                # squad.missions is the relationship.
                 completed_missions = [m for m in squad.missions if m.status == 'Abgeschlossen' and not m.is_deleted]
                 if completed_missions:
-                    # Sort by ID descending to get the last one
                     completed_missions.sort(key=lambda x: x.id, reverse=True)
                     target_mission = completed_missions[0]
 
             if target_mission:
                 if old_status in ['3', '4']:
-                    # Last visible was Mission Location. Snapshot it.
                     squad.custom_location = target_mission.location
                 elif old_status in ['7', '8']:
-                     # Last visible was Custom Override OR "BHP" (default)
                      if not squad.custom_location:
-                         squad.custom_location = "BHP"
-                     # If it was "Stau", it is already in custom_location, so we keep it.
+                         # Default to BHP, but try to find assigned Ambulanz name first
+                         found_loc = "BHP"
+                         if target_mission and target_mission.squads:
+                             for s in target_mission.squads:
+                                 if s.type == "Ambulanz" and s.id != squad.id:
+                                     found_loc = s.name
+                                     break
+                         squad.custom_location = found_loc
 
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as e:
+            print(f"Db Commit Error: {e}")
+            return jsonify({'error': 'Database error'}), 500
         
-        # Log logic: if squad is in an active mission, allow logging that linkage
-        # But a squad can be in multiple missions? Usually one active mission.
-        active_mission_id = None
-        for m in squad.missions:
-            if m.status != 'Abgeschlossen':
-                active_mission_id = m.id
-                break
-        
-        old_label = STATUS_MAP.get(old_status, old_status)
-        new_label = STATUS_MAP.get(new_status, new_status)
-        log_action('STATUS', f"{squad.name}: Statuswechsel von {old_label} auf {new_label}", 
-                   squad_id=squad.id, mission_id=active_mission_id)
+        # Log logic
+        try:
+            active_mission_id = None
+            for m in squad.missions:
+                if m.status != 'Abgeschlossen':
+                    active_mission_id = m.id
+                    break
+            
+            old_label = STATUS_MAP.get(old_status, old_status)
+            new_label = STATUS_MAP.get(new_status, new_status)
+            log_action('STATUS', LogMessages.STATUS_CHANGED.format(name=squad.name, status=new_label), 
+                       squad_id=squad.id, mission_id=active_mission_id)
+        except Exception as e:
+             print(f"Log Logging Error: {e}")
+             # Swallow logging error to prevent client crash
+             pass
+
         return jsonify(squad.to_dict())
     
     return jsonify(squad.to_dict())
@@ -675,21 +797,30 @@ def create_mission():
             if squad:
                 new_mission.squads.append(squad)
                 # Auto-set status to Integriert (Alarmiert)
-                if squad.current_status != 'Integriert':
+                if squad.current_status != 'Integriert' and squad.type != 'Ambulanz':
                     squad.current_status = 'Integriert'
                     squad.last_status_change = datetime.utcnow()
                     # Clear custom location so Mission Location takes precedence
                     squad.custom_location = None
                     
-                    # Log status change implicitly? Or explicitly? 
-                    # Let's log it explicitly as a system action
-                    log_action('STATUS', f"{squad.name}: {STATUS_MAP.get('Integriert', 'Integriert')}", 
-                               squad_id=squad.id, mission_id=new_mission.id) # Link to new mission
+                    # Log status change explicitly
+                    log_action('STATUS', f"{squad.name}: {LogMessages.DISPATCHED_AUTO.format(number=new_mission.mission_number or new_mission.id)}", 
+                               squad_id=squad.id, mission_id=new_mission.id)
+
+                elif squad.type == 'Ambulanz':
+                    # For Ambulanz, just log assignment, don't change status to 'Integriert'
+                    log_action('INFO', f"{squad.name}: {LogMessages.PATIENT_ASSIGNED}", 
+                               squad_id=squad.id, mission_id=new_mission.id)
     
     db.session.add(new_mission)
     db.session.commit()
     
-    log_action('EINSATZ ERSTELLT', f"Neuer Einsatz #{new_mission.mission_number or new_mission.id} in {new_mission.location}", mission_id=new_mission.id)
+    log_action('EINSATZ ERSTELLT', LogMessages.MISSION_CREATED.format(number=new_mission.mission_number or new_mission.id, reason=new_mission.reason, location=new_mission.location), mission_id=new_mission.id)
+    
+    # Auto-update Ambulanz status
+    for s in new_mission.squads:
+        update_ambulanz_occupancy(s)
+        
     return jsonify(new_mission.to_dict()), 201
 
 @app.route('/api/missions/<int:id>', methods=['PUT'])
@@ -701,47 +832,32 @@ def update_mission(id):
     changes = []
     
     if 'status' in data and data['status'] != mission.status:
-        changes.append(f"Status von {mission.status} auf {data['status']} geändert")
+        changes.append(f"Status geändert: {data['status']}")
         mission.status = data['status']
     
     if 'outcome' in data and data['outcome'] != mission.outcome:
-        old_val = mission.outcome or ""
         new_val = data['outcome'] or ""
         mission.outcome = data['outcome']
         
-        # Check if ARM details are provided in this request OR already exist
         current_arm_id = data.get('arm_id', mission.arm_id)
-        
-        if (mission.outcome == 'ARM' or mission.outcome == 'ARM (Anderes Rettungsmittel)') and current_arm_id:
-             changes.append(f"Ausgang: ARM (Kennung: {current_arm_id})")
+        if (mission.outcome in ['ARM', 'ARM (Anderes Rettungsmittel)']) and current_arm_id:
+             changes.append(f"Ausgang: ARM ({current_arm_id})")
         else:
              changes.append(f"Ausgang: {new_val}")
         
     if 'arm_id' in data and data['arm_id'] != mission.arm_id:
-        old_val = mission.arm_id or ""
         new_val = data['arm_id'] or ""
-        if not old_val:
-            changes.append(f"ARM Kennung auf {new_val} gesetzt")
-        else:
-            changes.append(f"ARM Kennung von {old_val} auf {new_val} geändert")
+        if mission.outcome not in ['ARM', 'ARM (Anderes Rettungsmittel)']: # Only log if not covered by outcome log
+             changes.append(f"ARM-ID: {new_val}")
         mission.arm_id = data['arm_id']
 
     if 'arm_type' in data and data['arm_type'] != mission.arm_type:
-        old_val = mission.arm_type or ""
         new_val = data['arm_type'] or ""
-        if not old_val:
-            changes.append(f"ARM Typ auf {new_val} gesetzt")
-        else:
-            changes.append(f"ARM Typ von {old_val} auf {new_val} geändert")
+        changes.append(f"ARM-Typ: {new_val}")
         mission.arm_type = data['arm_type']
 
     if 'arm_notes' in data and data['arm_notes'] != mission.arm_notes:
-        old_val = mission.arm_notes or ""
-        new_val = data['arm_notes'] or ""
-        if not old_val:
-            changes.append(f"Übergabe-Notiz hinzugefügt: {new_val}")
-        else:
-            changes.append(f"Übergabe-Notiz geändert: {old_val} zu {new_val}")
+        changes.append("Übergabe-Notiz aktualisiert")
         mission.arm_notes = data['arm_notes']
     
     # Prepare Deferred Squad Updates
@@ -768,11 +884,11 @@ def update_mission(id):
             
             diff_parts = []
             if added_names:
-                diff_parts.append(f"{', '.join(added_names)} hinzugefügt")
+                diff_parts.append(f"+ {', '.join(added_names)}")
             if removed_names:
-                diff_parts.append(f"{', '.join(removed_names)} entfernt")
+                diff_parts.append(f"- {', '.join(removed_names)}")
             
-            changes.append(f"Trupps aktualisiert: {'; '.join(diff_parts)}")
+            changes.append(f"Trupps: {'; '.join(diff_parts)}")
 
             # Update Relationship
             mission.squads = []
@@ -787,13 +903,13 @@ def update_mission(id):
 
     # Handle description separately to include content in log
     if 'description' in data and mission.description != data['description']:
-        old_val = mission.description
-        new_val = data['description'] or "(leer)"
-        if not old_val:
-             changes.append(f"Lage auf {new_val} gesetzt")
-        else:
-             changes.append(f"Lage aktualisiert: {old_val} -> {new_val}")
+        changes.append("Lage aktualisiert")
         mission.description = data['description']
+    
+    if 'notes' in data and mission.notes != data['notes']:
+        if data['notes'] and not mission.notes:
+             changes.append(LogMessages.NOTE_ADDED) # Less spam
+        mission.notes = data['notes']
 
     # Handle other fields
     field_map = {
@@ -810,21 +926,15 @@ def update_mission(id):
     
     for f, label in field_map.items():
         if f in data and getattr(mission, f) != data[f]:
-            old_val = getattr(mission, f)
             new_val = data[f] or "(leer)"
-            
-            if not old_val:
-                 changes.append(f"{label} auf {new_val} gesetzt")
-            else:
-                 changes.append(f"{label} von {old_val} auf {new_val} geändert")
-            
+            changes.append(f"{label}: {new_val}")
             setattr(mission, f, data[f])
             
     if 'notes' in data and mission.notes != data['notes']:
         old_val = mission.notes
         new_val = data['notes'] or "(leer)"
         if not old_val:
-            changes.append(f"Notiz hinzugefügt: {new_val}")
+            changes.append(f"{LogMessages.NOTE_ADDED}: {new_val}")
         else:
             changes.append(f"Notiz geändert: {old_val} zu {new_val}")
         mission.notes = data['notes']
@@ -834,7 +944,7 @@ def update_mission(id):
         db.session.commit()
         m_num = mission.mission_number or mission.id
         # Log Mission Update
-        log_action('EINSATZ UPDATE', f"[Einsatz #{m_num}] {'; '.join(changes)}", mission_id=mission.id)
+        log_action('EINSATZ UPDATE', LogMessages.MISSION_UPDATED.format(number=m_num, changes='; '.join(changes)), mission_id=mission.id)
     
     # Process Deferred Squad Status Updates (logs will appear AFTER mission update)
     if squads_to_update_status:
@@ -847,6 +957,10 @@ def update_mission(id):
                 log_action('STATUS', f"{s.name}: Status auf {STATUS_MAP.get('Integriert', 'Integriert')} gesetzt", 
                            squad_id=s.id, mission_id=mission.id)
 
+    # Auto-update Ambulanz status (Check all current squads)
+    for s in mission.squads:
+        update_ambulanz_occupancy(s)
+
     return jsonify(mission.to_dict())
 
 @app.route('/api/missions/<int:id>', methods=['DELETE'])
@@ -857,7 +971,7 @@ def delete_mission(id):
     data = request.json or {}
     reason = data.get('reason', 'Keine Begründung')
     
-    log_action('EINSATZ GELÖSCHT', f"Einsatz {mission.mission_number or mission.id} gelöscht. Grund: {reason}", mission_id=mission.id)
+    log_action('EINSATZ GELÖSCHT', LogMessages.MISSION_DELETED.format(number=mission.mission_number or mission.id, reason=reason), mission_id=mission.id)
     
     # Soft Delete instead of hard delete
     mission.is_deleted = True
@@ -881,37 +995,51 @@ def get_changes():
 def generate_export_file(config):
     output = io.StringIO()
     sid = config.session_id if config else get_session_id()
+
+    # Helper for local time conversion
+    def to_local(dt_obj):
+        if not dt_obj:
+            return None
+        # Assume server local time is desired
+        # UTC -> Local System Time
+        return dt_obj.replace(tzinfo=timezone.utc).astimezone(None)
     
     # Header
-    output.write("=== EINSATZPROTOKOLL ===\n")
+    output.write(f"{LogMessages.REPORT_TITLE_TXT}\n")
     if config:
-        output.write(f"Dienst: {config.location}\n")
+        output.write(f"{LogMessages.LBL_SERVICE} {config.location}\n")
         if config.address:
-            output.write(f"Adresse: {config.address}\n")
+            output.write(f"{LogMessages.LBL_ADDRESS} {config.address}\n")
         
         # Format times nicely
-        s_str = config.start_time.strftime('%d.%m.%Y %H:%M') if config.start_time else '?'
-        e_str = config.end_time.strftime('%d.%m.%Y %H:%M') if config.end_time else 'Laufend'
+        s_local = to_local(config.start_time)
+        e_local = to_local(config.end_time)
         
-        output.write(f"Zeitraum: {s_str} - {e_str}\n")
+        s_str = s_local.strftime('%d.%m.%Y %H:%M') if s_local else '?'
+        e_str = e_local.strftime('%d.%m.%Y %H:%M') if e_local else 'Laufend'
+        
+        output.write(f"{LogMessages.LBL_PERIOD} {s_str} - {e_str}\n")
     output.write("\n")
     
     # Missions
     missions = Mission.query.filter_by(session_id=sid).order_by(Mission.created_at).all()
-    output.write(f"=== EINSÄTZE ({len(missions)}) ===\n\n")
+    output.write(f"=== {LogMessages.SECTION_MISSIONS} ({len(missions)}) ===\n\n")
     
     for m in missions:
-        output.write(f"Einsatz #{m.mission_number or m.id}\n")
+        output.write(f"{LogMessages.LBL_MISSION_NUM.format(number=m.mission_number or m.id)}\n")
         
         # Show start time and end time (if completed)
-        start_time = m.created_at.strftime('%d.%m.%Y %H:%M:%S') if m.created_at else '?'
+        start_local = to_local(m.created_at)
+        start_time = start_local.strftime('%d.%m.%Y %H:%M:%S') if start_local else '?'
+        
         if m.status == 'Abgeschlossen':
             # Find the completion time from logs
             m_logs = LogEntry.query.filter_by(mission_id=m.id, action='EINSATZ UPDATE', session_id=sid).order_by(LogEntry.timestamp.desc()).all()
             end_time = 'Abgeschlossen'
             for l in m_logs:
                 if 'Status: Laufend -> Abgeschlossen' in (l.details or "") or 'auf Abgeschlossen' in (l.details or ""):
-                    end_time = l.timestamp.strftime('%d.%m.%Y %H:%M:%S')
+                    end_local = to_local(l.timestamp)
+                    end_time = end_local.strftime('%d.%m.%Y %H:%M:%S')
                     break
             
             outcome_display = m.outcome
@@ -927,34 +1055,36 @@ def generate_export_file(config):
                 else:
                     outcome_display = basic
                 
-            output.write(f"Zeit: {start_time} - {end_time} ({outcome_display})\n")
+            output.write(f"{LogMessages.LBL_TIME} {start_time} - {end_time} ({outcome_display})\n")
         else:
-            output.write(f"Zeit: {start_time} - Laufend\n")
+            output.write(f"{LogMessages.LBL_TIME} {start_time} - Laufend\n")
         
-        output.write(f"Ort: {m.location}\n")
-        output.write(f"Grund: {m.reason}\n")
+        output.write(f"{LogMessages.LBL_LOCATION} {m.location}\n")
+        output.write(f"{LogMessages.LBL_REASON} {m.reason}\n")
         val_entity = m.alarming_entity or "-"
-        output.write(f"Alarmierung: {val_entity}\n")
-        output.write(f"Beteiligte Trupps: {', '.join([s.name for s in m.squads])}\n")
+        output.write(f"{LogMessages.LBL_ALARMING}: {val_entity}\n")
+        output.write(f"{LogMessages.LBL_SQUADS}: {', '.join([s.name for s in m.squads])}\n")
         
         if m.description:
-            output.write(f"Lage: {m.description}\n")
+            output.write(f"{LogMessages.LBL_SITUATION} {m.description}\n")
         if m.notes:
-            output.write(f"Notizen: {m.notes}\n")
+            output.write(f"{LogMessages.LBL_NOTES} {m.notes}\n")
         
         # Chronology of this mission
         m_logs = LogEntry.query.filter_by(mission_id=m.id).order_by(LogEntry.timestamp).all()
         if m_logs:
-            output.write("  Verlauf:\n")
+            output.write(f"  {LogMessages.LBL_HISTORY}\n")
             for l in m_logs:
                 # Clean up log details "None"
                 safe_details = l.details.replace("None", "(leer)") if l.details else ""
-                output.write(f"  - [{l.timestamp.strftime('%H:%M:%S')}] {l.action}: {safe_details}\n")
+                cur_local = to_local(l.timestamp)
+                ts_str = cur_local.strftime('%H:%M:%S') if cur_local else "?"
+                output.write(f"  - [{ts_str}] {l.action}: {safe_details}\n")
         
         output.write("-" * 40 + "\n\n")
 
     # Squad Activity / Pause Analysis
-    output.write("=== TRUPP-AKTIVITÄT ===\n\n")
+    output.write(f"=== {LogMessages.SECTION_SQUADS} ===\n\n")
     squads = Squad.query.filter_by(session_id=sid).all()
     for s in squads:
         # Count missions for this squad
@@ -970,6 +1100,10 @@ def generate_export_file(config):
         
         for l in s_logs:
             safe_details = l.details.replace("None", "(leer)") if l.details else ""
+            
+            cur_local = to_local(l.timestamp)
+            ts_str = cur_local.strftime('%H:%M:%S') if cur_local else "?"
+            
             if l.action == 'STATUS':
                 # Add mission context if available
                 mission_context = ""
@@ -979,14 +1113,14 @@ def generate_export_file(config):
                         mission_num = mission.mission_number or mission.id
                         mission_context = f" (Einsatz #{mission_num})"
                 
-                output.write(f"  [{l.timestamp.strftime('%H:%M:%S')}] {safe_details}{mission_context}\n")
+                output.write(f"  [{ts_str}] {safe_details}{mission_context}\n")
                 
                 # Check if status changed to Pause
                 if '-> Pause' in l.details:
-                    pause_start = l.timestamp
+                    pause_start = cur_local
                 # Check if status changed from Pause to something else
                 elif pause_start and 'Pause ->' in l.details:
-                    pause_end = l.timestamp
+                    pause_end = cur_local
                     pause_periods.append(f"{pause_start.strftime('%H:%M:%S')} - {pause_end.strftime('%H:%M:%S')}")
                     pause_start = None
         
@@ -996,38 +1130,42 @@ def generate_export_file(config):
         
         # Summary of pauses
         if pause_periods:
-            output.write(f"  Pausen: {'; '.join(pause_periods)}\n")
+            output.write(f"  {LogMessages.LBL_PAUSES}: {'; '.join(pause_periods)}\n")
         output.write("\n")
     
     # Full Log
-    output.write("=== GESAMTES LOGBUCH ===\n")
+    output.write(f"=== {LogMessages.SECTION_LOG} ===\n")
     all_logs = LogEntry.query.filter_by(session_id=sid).order_by(LogEntry.timestamp).all()
     for l in all_logs:
         safe_details = l.details.replace("None", "(leer)") if l.details else ""
-        output.write(f"[{l.timestamp.strftime('%Y-%m-%d %H:%M:%S')}] [{l.action}] {safe_details}\n")
+        l_local = to_local(l.timestamp)
+        ts_full = l_local.strftime('%Y-%m-%d %H:%M:%S') if l_local else "?"
+        output.write(f"[{ts_full}] [{l.action}] {safe_details}\n")
         
     output.write("\n")
 
     # Deleted Missions
     deleted_missions = Mission.query.filter_by(session_id=sid, is_deleted=True).order_by(Mission.created_at).all()
     if deleted_missions:
-        output.write("=== GELÖSCHTE EINSÄTZE ===\n\n")
+        output.write(f"=== {LogMessages.SECTION_DELETED} ===\n\n")
         for m in deleted_missions:
             m_num = m.mission_number or m.id
-            output.write(f"Einsatz #{m_num} ({m.location})\n")
+            output.write(f"{LogMessages.LBL_MISSION_NUM.format(number=m_num)} ({m.location})\n")
             val_reason = m.deletion_reason or "-"
-            output.write(f"  Grund für Löschung: {val_reason}\n")
-            output.write(f"  Urspr. Alarmierung: {m.reason}\n")
+            output.write(f"  {LogMessages.LBL_DELETE_REASON} {val_reason}\n")
+            output.write(f"  {LogMessages.LBL_ORIGINAL_ALARM} {m.reason}\n")
             if m.description:
-                output.write(f"  Lage: {m.description}\n")
+                output.write(f"  {LogMessages.LBL_SITUATION} {m.description}\n")
             
             # Add logs for deleted mission context
             m_logs = LogEntry.query.filter_by(mission_id=m.id).order_by(LogEntry.timestamp).all()
             if m_logs:
-                output.write("  Verlauf vor Löschung:\n")
+                output.write(f"  {LogMessages.LBL_HISTORY}\n")
                 for l in m_logs:
                      safe_details = l.details.replace("None", "(leer)") if l.details else ""
-                     output.write(f"  - [{l.timestamp.strftime('%H:%M:%S')}] {l.action}: {safe_details}\n")
+                     l_local = to_local(l.timestamp)
+                     ts_str = l_local.strftime('%H:%M:%S') if l_local else "?"
+                     output.write(f"  - [{ts_str}] {l.action}: {safe_details}\n")
             output.write("\n")
 
     # Convert to bytes
@@ -1058,8 +1196,11 @@ def end_shift():
     if config:
         config.is_active = False
         config.end_time = datetime.utcnow()
+        config.end_time = datetime.utcnow()
+        # Cleanup Access Tokens
+        Squad.query.filter_by(session_id=sid).update({Squad.access_token: None})
         db.session.commit()
-        log_action('KONFIGURATION', f"Dienst beendet: {config.location}")
+        log_action('KONFIGURATION', LogMessages.SHIFT_ENDED.format(location=config.location))
         
     # Reset predefined options to default values
     PredefinedOption.query.filter_by(session_id=sid).delete()
@@ -1111,7 +1252,7 @@ def generate_pdf_file(config):
     small_style = ParagraphStyle('Small', parent=styles['Normal'], fontSize=8, leading=10)
     
     # Title
-    story.append(Paragraph("Einsatzprotokoll / After Action Report", title_style))
+    story.append(Paragraph(LogMessages.REPORT_TITLE_PDF, title_style))
     story.append(Spacer(1, 0.5*cm))
     
     # Shift Info
@@ -1121,8 +1262,8 @@ def generate_pdf_file(config):
     addr = config.address if config and config.address else '-'
     
     info_data = [
-        ["Dienst:", loc, "Adresse:", addr],
-        ["Zeitraum:", f"{s_str} - {e_str}", "", ""]
+        [f"{LogMessages.LBL_SERVICE}", loc, f"{LogMessages.LBL_ADDRESS}", addr],
+        [f"{LogMessages.LBL_PERIOD}", f"{s_str} - {e_str}", "", ""]
     ]
     t = Table(info_data, colWidths=[3*cm, 8*cm, 3*cm, 8*cm])
     t.setStyle(TableStyle([
@@ -1208,7 +1349,7 @@ def generate_pdf_file(config):
 
     for m in valid_missions:
         m_num = m.mission_number or str(m.id)
-        story.append(Paragraph(f"Einsatz #{m_num}", heading3))
+        story.append(Paragraph(LogMessages.LBL_MISSION_NUM.format(number=m_num), heading3))
         
         # Details Table for this mission
         start_t = m.created_at.strftime('%d.%m.%Y %H:%M:%S') if m.created_at else "?"
@@ -1233,16 +1374,16 @@ def generate_pdf_file(config):
             loc_display = f"{m.location} (Initial: {m.initial_location})"
 
         det_data = [
-            ["Zeit:", f"{start_t} - {end_time}", "Ausgang:", outcome],
-            ["Ort:", Paragraph(loc_display, normal_style), "Alarmierung:", m.alarming_entity or "-"],
-            ["Grund:", Paragraph(m.reason, normal_style), "Trupps:", ", ".join([s.name for s in m.squads])]
+            [f"{LogMessages.LBL_TIME}", f"{start_t} - {end_time}", f"{LogMessages.LBL_OUTCOME}", outcome],
+            [f"{LogMessages.LBL_LOCATION}", Paragraph(loc_display, normal_style), f"{LogMessages.LBL_ALARMING}:", m.alarming_entity or "-"],
+            [f"{LogMessages.LBL_REASON}", Paragraph(m.reason, normal_style), f"{LogMessages.LBL_SQUADS}:", ", ".join([s.name for s in m.squads])]
         ]
         
         # Add description and notes if present
         if m.description:
-             det_data.append(["Lage:", Paragraph(m.description, normal_style), "", ""])
+             det_data.append([f"{LogMessages.LBL_SITUATION}", Paragraph(m.description, normal_style), "", ""])
         if m.notes:
-             det_data.append(["Notizen:", Paragraph(m.notes, normal_style), "", ""])
+             det_data.append([f"{LogMessages.LBL_NOTES}", Paragraph(m.notes, normal_style), "", ""])
 
         dt = Table(det_data, colWidths=[2*cm, 9*cm, 3*cm, 9*cm])
         dt.setStyle(TableStyle([
@@ -1259,7 +1400,7 @@ def generate_pdf_file(config):
         m_logs = LogEntry.query.filter_by(mission_id=m.id).order_by(LogEntry.timestamp).all()
         if m_logs:
             story.append(Spacer(1, 0.2*cm))
-            story.append(Paragraph("Verlauf:", styles['Normal']))
+            story.append(Paragraph(LogMessages.LBL_HISTORY, styles['Normal']))
             log_data = []
             for l in m_logs:
                 safe_details = l.details.replace("None", "(leer)") if l.details else ""
@@ -1282,7 +1423,7 @@ def generate_pdf_file(config):
 
     # Squad Activity
     story.append(PageBreak())
-    story.append(Paragraph("Trupp-Aktivität", heading2))
+    story.append(Paragraph(LogMessages.SECTION_SQUADS, heading2))
     
     squads = Squad.query.filter_by(session_id=sid).all()
     for s in squads:
@@ -1340,12 +1481,12 @@ def generate_pdf_file(config):
 
         # Display Pause Summary
         if pause_periods:
-            story.append(Paragraph(f"<b>Pausenzeiten:</b> {', '.join(pause_periods)}", normal_style))
+            story.append(Paragraph(f"<b>{LogMessages.LBL_PAUSES}:</b> {', '.join(pause_periods)}", normal_style))
             story.append(Spacer(1, 0.2*cm))
         else:
              if len(mission_count_list := [m for m in s.missions]) > 0: # Just to not clutter empty squads
-                 story.append(Paragraph("Keine Pausen dokumentiert.", normal_style))
-                 story.append(Spacer(1, 0.2*cm))
+                  story.append(Paragraph(LogMessages.LBL_NO_PAUSES, normal_style))
+                  story.append(Spacer(1, 0.2*cm))
 
         if squad_log_data:
             slt = Table(squad_log_data, colWidths=[2.5*cm, 18*cm])
@@ -1360,7 +1501,7 @@ def generate_pdf_file(config):
 
     # Full Log
     story.append(PageBreak())
-    story.append(Paragraph("Gesamtes Logbuch", heading2))
+    story.append(Paragraph(LogMessages.SECTION_LOG, heading2))
     
     all_logs = LogEntry.query.filter_by(session_id=sid).order_by(LogEntry.timestamp).all()
     full_log_data = [["Zeit", "Aktion", "Details"]]
@@ -1386,12 +1527,12 @@ def generate_pdf_file(config):
     deleted_missions = Mission.query.filter_by(session_id=sid, is_deleted=True).order_by(Mission.created_at).all()
     if deleted_missions:
         story.append(PageBreak())
-        story.append(Paragraph("Gelöschte Einsätze", heading2))
+        story.append(Paragraph(LogMessages.SECTION_DELETED, heading2))
         
         for m in deleted_missions:
              m_num = m.mission_number or str(m.id)
-             story.append(Paragraph(f"Einsatz #{m_num} ({m.location})", heading3))
-             story.append(Paragraph(f"Grund für Löschung: {m.deletion_reason or '-'}", normal_style))
+             story.append(Paragraph(f"{LogMessages.LBL_MISSION_NUM.format(number=m_num)} ({m.location})", heading3))
+             story.append(Paragraph(f"{LogMessages.LBL_DELETE_REASON} {m.deletion_reason or '-'}", normal_style))
              story.append(Spacer(1, 0.2*cm))
              
              # Logs for deleted mission
@@ -1424,7 +1565,42 @@ def export_pdf():
     mem = generate_pdf_file(config)
     filename = f"report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
     return send_file(mem, as_attachment=True, download_name=filename, mimetype='application/pdf')
+
+# --- Mobile View Route ---
+@app.route('/squad/mobile-view', methods=['GET'])
+def mobile_squad_view():
+    token = request.args.get('token')
+    if not token:
+        return "Kein Token angegeben", 403
     
+    # Validation
+    squad = Squad.query.filter_by(access_token=token).first()
+    if not squad:
+        return "Ungültiges Token", 403
+        
+    # Check if session is active (optional but good practice)
+    config = ShiftConfig.query.filter_by(session_id=squad.session_id, is_active=True).first()
+    if not config:
+        return "Dienst ist nicht aktiv", 403
+
+    # Authenticate the session
+    session['user_id'] = squad.session_id
+    session.modified = True
+
+    return render_template('mobile_squad_view.html', squad=squad, token=token)
+
+    
+@app.route('/api/logs/custom', methods=['POST'])
+def custom_log():
+    data = request.json
+    details = data.get('details')
+    if not details:
+        return jsonify({'error': 'Details required'}), 400
+    
+    # Log as 'EREIGNIS'
+    log_action('EREIGNIS', details)
+    return jsonify({'status': 'ok'})
+
 if __name__ == '__main__':
     with app.app_context():
         # Auto-create DB if not exists, but we rely on a manual reset or Init API for clean slate usually

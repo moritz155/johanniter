@@ -3,6 +3,24 @@ let missionsData = [];
 let optionsData = {};
 let configData = null;
 
+// GLOBAL FETCH INTERCEPTOR for Session Robustness
+const originalFetch = window.fetch;
+window.fetch = async function (url, options = {}) {
+    const sid = localStorage.getItem('session_id');
+    if (sid) {
+        options.headers = options.headers || {};
+        // Handle Headers object or plain object
+        if (options.headers instanceof Headers) {
+            options.headers.append('X-Session-ID', sid);
+        } else if (Array.isArray(options.headers)) {
+            options.headers.push(['X-Session-ID', sid]);
+        } else {
+            options.headers['X-Session-ID'] = sid;
+        }
+    }
+    return originalFetch(url, options);
+};
+
 // Theme Toggle Logic
 function toggleTheme() {
     document.body.classList.toggle('dark-mode');
@@ -50,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(fetchWeather, 600000); // Refresh every 10 mins
     setInterval(updateClock, 1000);
     setInterval(updateTimers, 1000);
+    setInterval(loadData, 5000); // Polling for live updates
     checkMobile(); // Check initial view
 });
 
@@ -58,10 +77,20 @@ async function loadData() {
         const response = await fetch('/api/init');
         const data = await response.json();
 
+        // DEBUG: Temporary diagnostic
+        const lsID = localStorage.getItem('session_id');
+        const configID = data.config ? data.config.session_id : 'null';
+        // if (!data.config) alert(`DEBUG: Load Failed! Config is NULL.\nLocal Session: ${lsID}\nServer returned: ${configID}`);
+
         configData = data.config;
+        if (configData && configData.session_id) {
+            localStorage.setItem('session_id', configData.session_id);
+        }
+
         squadsData = data.squads;
         missionsData = data.missions;
         optionsData = data.options;
+
 
         if (!configData) {
             document.getElementById('welcome-screen').classList.add('active');
@@ -104,9 +133,10 @@ async function startShift(e) {
     });
 
     try {
-        await fetch('/api/config', {
+        const response = await fetch('/api/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({
                 location: finalLoc,
                 address: addr,
@@ -115,11 +145,23 @@ async function startShift(e) {
                 squads: squads
             })
         });
+
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || "Serverfehler beim Setup");
+        }
+
+        const data = await response.json();
+        if (data.session_id) {
+            localStorage.setItem('session_id', data.session_id);
+        }
+
         closeModal('shift-setup-modal');
         document.getElementById('welcome-screen').classList.remove('active');
         loadData();
     } catch (error) {
         console.error('Error starting shift:', error);
+        alert("Fehler: " + error.message);
     }
 }
 
@@ -183,6 +225,9 @@ async function joinShift(e) {
         const data = await response.json();
 
         if (data.success) {
+            if (data.session_id) {
+                localStorage.setItem('session_id', data.session_id);
+            }
             closeModal('join-modal');
             document.getElementById('welcome-screen').classList.remove('active');
             // Reload data to sync with the session we just joined
@@ -199,7 +244,7 @@ async function joinShift(e) {
 // --- Guide / Tour System ---
 // --- Tutorial System ---
 let currentTutorialStep = 0;
-const totalTutorialSteps = 4;
+const totalTutorialSteps = 5;
 
 function openTutorial() {
     currentTutorialStep = 0;
@@ -451,201 +496,228 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// --- Custom Log Event ---
+function addCustomLogEvent() {
+    document.getElementById('custom-event-input').value = '';
+    document.getElementById('custom-event-modal').classList.add('open');
+    // Focus after opening
+    setTimeout(() => document.getElementById('custom-event-input').focus(), 100);
+}
+
+async function submitCustomEvent(e) {
+    e.preventDefault();
+    const text = document.getElementById('custom-event-input').value.trim();
+    if (!text) return;
+
+    try {
+        await fetch('/api/logs/custom', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ details: text })
+        });
+
+        closeModal('custom-event-modal');
+        // Reload logs if we are in the log modal
+        loadData();
+    } catch (error) {
+        console.error("Error adding custom log:", error);
+        alert("Fehler beim Speichern des Ereignisses.");
+    }
+}
+
+
 // --- Squads ---
 
 function renderSquads() {
     const container = document.getElementById('squad-list');
-    container.innerHTML = '';
 
+    // 1. Remove squads that are no longer in data
+    const activeIds = new Set(squadsData.map(s => s.id));
+    Array.from(container.children).forEach(child => {
+        const id = parseInt(child.dataset.id);
+        if (!activeIds.has(id)) {
+            child.remove();
+        }
+    });
+
+    // 2. Update or Create squads
     squadsData.forEach(squad => {
-        const card = document.createElement('div');
-        card.className = 'squad-card';
+        let card = document.getElementById(`squad-card-${squad.id}`);
+        const isNew = !card;
 
-        // Status mapping
-        const statuses = [
-            { code: '2', label: 'EB', class: 's2' },
-            { code: '3', label: 'zBO', class: 's3' },
-            { code: '4', label: 'BO', class: 's4' },
-            { code: '7', label: 'zAO', class: 's7' },
-            { code: '8', label: 'AO', class: 's8' },
-            { code: 'Pause', label: 'Pause', class: 'sP' },
-            { code: 'NEB', label: 'NEB', class: 'sNEB' }
-        ];
+        if (isNew) {
+            card = document.createElement('div');
+            card.id = `squad-card-${squad.id}`;
+            card.className = 'squad-card';
+            card.dataset.id = squad.id;
+            card.setAttribute('draggable', true);
 
-        let locInfo = squad.current_status;
-        const statusMap = {
-            '2': 'Einsatzbereit',
-            '3': 'Zum Berufungsort',
-            '4': 'Am Berufungsort',
-            '7': 'Zum Abgabeort',
-            '8': 'Am Abgabeort',
-            'Pause': 'Pause',
-            'NEB': 'Nicht Einsatzbereit',
-            'Integriert': 'Disponiert'
-        };
+            // Drag Events
+            card.addEventListener('dragstart', handleDragStart);
+            card.addEventListener('dragover', handleDragOver);
+            card.addEventListener('drop', handleDrop);
+            card.addEventListener('dragenter', handleDragEnter);
+            card.addEventListener('dragleave', handleDragLeave);
 
-
-        if (statusMap[squad.current_status]) {
-            // Removed duplicate locInfo setting. 
-            // Logic is now consolidated in the active/inactive checks below.
+            container.appendChild(card);
         }
 
+        // Generate Content
+        let contentHtml = '';
 
+        // --- AMBULANZ Logic ---
+        if (squad.type === 'Ambulanz') {
+            const ambulanzStatuses = [
+                { code: '2', label: 'EB', class: 's2' },
+                { code: 'NEB', label: 'NEB', class: 'sNEB' },
+                { code: '4', label: 'Besetzt', class: 's4' }
+            ];
 
-        // Location Info
-        // ... (Already handled above)
+            let buttonsHtml = '';
+            ambulanzStatuses.forEach(st => {
+                const active = squad.current_status === st.code ? 'active' : '';
+                buttonsHtml += `<button class="status-btn ${st.class} ${active}" 
+                    onclick="setSquadStatus(${squad.id}, '${st.code}')">${st.label}</button>`;
+            });
 
-        if (squad.active_mission) {
-            let leftPart = "";
-            let rightPart = "";
+            const patCount = squad.patient_count || 0;
+            const infoText = `<strong>Patienten: ${patCount}</strong>`;
 
-            // Determine Parts based on Status
-            // Special Display for zAO (7) -> Split View: Mission + "r. BHP"
-            if (squad.current_status === '7') {
-                const missionNum = squad.active_mission.mission_number || squad.active_mission.id;
-                leftPart = `Einsatz #${missionNum} (${squad.active_mission.location}) - ${squad.active_mission.reason}`;
-                rightPart = "r. BHP";
+            contentHtml = `
+                <div class="squad-info">
+                    <div style="display:flex; align-items:center; gap: 0.5rem;">
+                        <h3>${squad.name} <span style="font-size:0.8em; opacity:0.7;">(BHP)</span></h3>
+                         <button class="icon-btn tiny" onclick='editSquad(${JSON.stringify(squad).replace(/'/g, "&#39;")})' title="Bearbeiten">✎</button>
+                    </div>
+                    <div class="squad-status-text status-${squad.current_status}" style="cursor:default;">${infoText}</div>
+                    <div class="squad-actions">
+                        ${buttonsHtml}
+                    </div>
+                </div>
+                 <div class="squad-timer" id="timer-${squad.id}" data-change="${squad.last_status_change}" style="margin-right: 1.5rem;">00:00</div>
+            `;
 
-                // Special Display for AO (8) -> Mission Info + "BHP"
-            } else if (squad.current_status === '8') {
-                // User: "kannst du beim Status AO die Info trotzdem zeigen"
-                const missionNum = squad.active_mission.mission_number || squad.active_mission.id;
-                leftPart = `Einsatz #${missionNum} (${squad.active_mission.location}) - ${squad.active_mission.reason}`;
-                rightPart = "BHP";
-            } else {
-                // All other active statuses (3, 4)
-
-                // Left: Mission Info (Number + Reason)
-                // "Links ist Einstzinfo"
-                leftPart = `Einsatz #${squad.active_mission.mission_number || squad.active_mission.id} - ${squad.active_mission.reason}`;
-
-                // Right: Location
-                // "rechts ist Standort"
-                if (squad.current_status === '7') {
-                    // zAO (7) -> "r. BHP"
-                    rightPart = "r. BHP";
-                    leftPart = `Einsatz #${squad.active_mission.mission_number || squad.active_mission.id} (${squad.active_mission.location}) - ${squad.active_mission.reason}`;
-                } else if (squad.current_status === '3') {
-                    // zBO (3) -> "r. [Location]"
-                    // "bei status zBO soll immer ein r. vor den Standort stehen"
-                    rightPart = "r. " + squad.active_mission.location;
-                } else {
-                    // Standard (4) -> Real Location on Right
-                    rightPart = squad.active_mission.location;
-                }
-            }
-
-            // OVERRIDE: If custom_location is set, it replaces the Right Part (Location)
-            // EXCEPTION: For zBO (3) and BO (4), we ALWAYS show the Mission Location (or r. + Mission Location).
-            // So we ignore any 'dormant' custom_location that might be stored from a previous zAO state.
-            if (squad.custom_location && !['3', '4'].includes(squad.current_status)) {
-                rightPart = squad.custom_location;
-
-                // User Request: "Initial:" info removed.
-
-            }
-
-            locInfo = `<span>${leftPart}</span><span>${rightPart}</span>`;
-
-            // Warning Check: Mission active but Status is 2 (EB), Pause, or NEB
-            const invalidStatuses = ['2', 'Pause', 'NEB'];
-            if (invalidStatuses.includes(squad.current_status)) {
-                locInfo += `<span class="status-warning-dot" title="Status prüfen!"></span>`;
-            }
         } else {
-            // No Active Mission (e.g. Status 1, 2, 6, OR 3/4/7/8 after mission completion)
-            if (statusMap[squad.current_status]) {
-                const defaultText = statusMap[squad.current_status];
+            // --- TRUPP Logic ---
+            const statuses = [
+                { code: '2', label: 'EB', class: 's2' },
+                { code: '3', label: 'zBO', class: 's3' },
+                { code: '4', label: 'BO', class: 's4' },
+                { code: '7', label: 'zAO', class: 's7' },
+                { code: '8', label: 'AO', class: 's8' },
+                { code: 'Pause', label: 'Pause', class: 'sP' },
+                { code: 'NEB', label: 'NEB', class: 'sNEB' }
+            ];
+
+            let locInfo = squad.current_status;
+            const statusMap = {
+                '2': 'Einsatzbereit', '3': 'Zum Berufungsort', '4': 'Am Berufungsort',
+                '7': 'Zum Abgabeort', '8': 'Am Abgabeort', 'Pause': 'Pause',
+                'NEB': 'Nicht Einsatzbereit', 'Integriert': 'Disponiert'
+            };
+
+            if (squad.active_mission) {
+                let leftPart = "";
                 let rightPart = "";
 
-                // Logic to persist location from LAST COMPLETED MISSION if currently in operational status
-                if (['3', '4', '7', '8'].includes(squad.current_status)) {
-                    // Try to find last completed mission for context
-                    const completedMissions = missionsData
-                        .filter(m => m.status === 'Abgeschlossen' && m.squad_ids && m.squad_ids.includes(squad.id))
-                        .sort((a, b) => (b.id) - (a.id)); // Sort Descending by ID
-
-                    const lastMission = completedMissions.length > 0 ? completedMissions[0] : null;
-
-                    if (squad.current_status === '7') {
-                        rightPart = "r. BHP";
-                    } else if (squad.current_status === '8') {
-                        rightPart = "BHP";
-                    } else if (squad.current_status === '3') {
-                        rightPart = lastMission ? ("r. " + lastMission.location) : "r. Standort?";
-                    } else if (squad.current_status === '4') {
-                        rightPart = lastMission ? lastMission.location : "Standort?";
+                let destName = "BHP";
+                if (squad.custom_location) {
+                    destName = squad.custom_location;
+                } else {
+                    const activeM = squad.active_mission;
+                    const fullMission = missionsData.find(m => m.id === activeM.id);
+                    if (fullMission && fullMission.squad_ids) {
+                        const amb = squadsData.find(s => fullMission.squad_ids.includes(s.id) && s.type === 'Ambulanz');
+                        if (amb) destName = amb.name;
                     }
                 }
 
-                // Status 2 (EB) Logic or Priority Overrides
-                if (squad.current_status === '2') {
-                    // For EB, we use custom or blank (handled by standard override check below, usually)
-                    // But EB has special "Left Right" split requests previously?
-                    // Currently falls into "Status Label" | "Custom/Right" Logic below.
+                if (squad.current_status === '7') {
+                    const missionNum = squad.active_mission.mission_number || squad.active_mission.id;
+                    leftPart = `Einsatz #${missionNum} (${squad.active_mission.location}) - ${squad.active_mission.reason}`;
+                    rightPart = "r. " + destName;
+                } else if (squad.current_status === '8') {
+                    const missionNum = squad.active_mission.mission_number || squad.active_mission.id;
+                    leftPart = `Einsatz #${missionNum} (${squad.active_mission.location}) - ${squad.active_mission.reason}`;
+                    rightPart = destName;
+                } else {
+                    leftPart = `Einsatz #${squad.active_mission.mission_number || squad.active_mission.id} - ${squad.active_mission.reason}`;
+                    if (squad.current_status === '3') rightPart = "r. " + squad.active_mission.location;
+                    else rightPart = squad.active_mission.location;
                 }
 
-                // Apply Custom Location Override (Highest Priority)
-                if (squad.custom_location) {
+                if (squad.custom_location && !['3', '4', '7', '8'].includes(squad.current_status)) {
                     rightPart = squad.custom_location;
                 }
 
-                // If rightPart is still empty (e.g. Status 1/2/6 without custom), just show single span? Or empty right span?
-                // Logic:
-                if (rightPart) {
-                    locInfo = `<span>${defaultText}</span><span>${rightPart}</span>`;
-                } else {
-                    locInfo = `<span>${defaultText}</span>`;
+                locInfo = `<span>${leftPart}</span><span>${rightPart}</span>`;
+
+                const invalidStatuses = ['2', 'Pause', 'NEB'];
+                if (invalidStatuses.includes(squad.current_status)) {
+                    locInfo += `<span class="status-warning-dot" title="Status prüfen!"></span>`;
+                }
+            } else {
+                if (statusMap[squad.current_status]) {
+                    const defaultText = statusMap[squad.current_status];
+                    let rightPart = "";
+
+                    if (['3', '4', '7', '8'].includes(squad.current_status)) {
+                        let destName = squad.custom_location || "BHP";
+                        if (squad.current_status === '7') rightPart = "r. " + destName;
+                        else if (squad.current_status === '8') rightPart = destName;
+                        else if (['3', '4'].includes(squad.current_status)) {
+                            const completedMissions = missionsData
+                                .filter(m => m.status === 'Abgeschlossen' && m.squad_ids && m.squad_ids.includes(squad.id))
+                                .sort((a, b) => (b.id) - (a.id));
+                            const lastMission = completedMissions.length > 0 ? completedMissions[0] : null;
+                            if (squad.current_status === '3') rightPart = lastMission ? ("r. " + lastMission.location) : "r. Standort?";
+                            else rightPart = lastMission ? lastMission.location : "Standort?";
+                        }
+                    } else {
+                        if (squad.custom_location) rightPart = squad.custom_location;
+                    }
+
+                    if (rightPart) locInfo = `<span>${defaultText}</span><span>${rightPart}</span>`;
+                    else locInfo = `<span>${defaultText}</span>`;
                 }
             }
+
+            let buttonsHtml = '';
+            statuses.forEach(st => {
+                let label = st.label;
+                let className = st.class;
+                if (squad.current_status === 'Integriert' && st.code === '2') {
+                    label = 'Disp'; className = 'sDip';
+                }
+                const active = squad.current_status === st.code ? 'active' : '';
+                buttonsHtml += `<button class="status-btn ${className} ${active}" 
+                    onclick="setSquadStatus(${squad.id}, '${st.code}')">${label}</button>`;
+            });
+
+            const badgeOnClick = `onclick="openLocationModal(${squad.id}, '${squad.custom_location || ''}')"`;
+            let badgeClass = `squad-status-text status-${squad.current_status} clickable-badge`;
+
+            contentHtml = `
+                <div class="squad-info">
+                    <div style="display:flex; align-items:center; gap: 0.5rem;">
+                        <h3>${squad.name} <span class="qual-badge">${squad.qualification}</span></h3>
+                        <button class="icon-btn tiny" onclick='editSquad(${JSON.stringify(squad).replace(/'/g, "&#39;")})' title="Trupp bearbeiten">✎</button>
+                    </div>
+                    <div class="${badgeClass}" ${badgeOnClick} title="Klicken um Standort zu ändern">${locInfo}</div>
+                    <div class="squad-actions">
+                        ${buttonsHtml}
+                    </div>
+                </div>
+                <div class="squad-timer" id="timer-${squad.id}" data-change="${squad.last_status_change}" style="margin-right: 1.5rem;">00:00</div>
+            `;
+        } // End Else
+
+        // DOM PATCH: Only update if changed
+        if (card.innerHTML !== contentHtml) {
+            card.innerHTML = contentHtml;
         }
-
-        let buttonsHtml = '';
-        statuses.forEach(st => {
-            let label = st.label;
-            let className = st.class;
-
-            // Special Logic for Integriert -> EB Button becomes Dip/Disp
-            if (squad.current_status === 'Integriert' && st.code === '2') {
-                label = 'Disp'; // User requested "Disp"
-                className = 'sDip';
-            }
-
-            const active = squad.current_status === st.code ? 'active' : '';
-            buttonsHtml += `<button class="status-btn ${className} ${active}" 
-                onclick="setSquadStatus(${squad.id}, '${st.code}')">${label}</button>`;
-        });
-
-        // Clickable Badge Logic - GLOBAL enablement
-        // "egal welcher Status" -> always clickable
-        const badgeOnClick = `onclick="openLocationModal(${squad.id}, '${squad.custom_location || ''}')"`;
-        let badgeClass = `squad-status-text status-${squad.current_status} clickable-badge`;
-
-        card.setAttribute('draggable', true);
-        card.dataset.id = squad.id;
-        card.addEventListener('dragstart', handleDragStart);
-        card.addEventListener('dragover', handleDragOver);
-        card.addEventListener('drop', handleDrop);
-        card.addEventListener('dragenter', handleDragEnter);
-        card.addEventListener('dragleave', handleDragLeave);
-
-        card.innerHTML = `
-            <div class="squad-info">
-                <div style="display:flex; align-items:center; gap: 0.5rem;">
-                    <h3>${squad.name} <span class="qual-badge">${squad.qualification}</span></h3>
-                    <button class="icon-btn tiny" onclick='editSquad(${JSON.stringify(squad).replace(/'/g, "&#39;")})' title="Trupp bearbeiten">✎</button>
-                </div>
-                <div class="${badgeClass}" ${badgeOnClick} title="Klicken um Standort zu ändern">${locInfo}</div>
-                <div class="squad-actions">
-                    ${buttonsHtml}
-                </div>
-            </div>
-            <div class="squad-timer" id="timer-${squad.id}" data-change="${squad.last_status_change}" style="margin-right: 1.5rem;">
-                00:00
-            </div>
-        `;
-        container.appendChild(card);
     });
+
     updateTimers();
 }
 
@@ -692,6 +764,16 @@ async function setSquadStatus(id, status) {
     const squad = squadsData.find(s => s.id === id);
     if (!squad) return;
 
+    // --- zAO (Status 7) Interception for Destination Selection ---
+    if (status === '7') {
+        const ambulanzUnits = squadsData.filter(s => s.type === 'Ambulanz');
+        if (ambulanzUnits.length > 0) {
+            // Open Destination Modal
+            openDestinationModal(id, ambulanzUnits);
+            return;
+        }
+    }
+
     if (status === 'NEB' || status === '2') {
         // Find ALL active missions this squad is in
         const activeMissions = missionsData.filter(m =>
@@ -702,12 +784,128 @@ async function setSquadStatus(id, status) {
             pendingStatusCtx = { id: id, targetStatus: status };
             nebConflictQueue = [...activeMissions];
             processNextNebConflict();
-            return; // Stop here, wait for queue processing
+            return;
         }
     }
 
     // Normal path
     await performStatusUpdate(id, status);
+}
+
+// Destination Selection Logic
+let pendingDestinationSquadId = null;
+
+function openDestinationModal(squadId, ambulanzUnits) {
+    pendingDestinationSquadId = squadId;
+    const container = document.getElementById('destination-options');
+    container.innerHTML = '';
+
+    // 1. Ambulanz Units
+    ambulanzUnits.forEach(unit => {
+        const patCount = unit.patient_count || 0;
+        const btn = document.createElement('div');
+        btn.className = 'destination-btn';
+        if (patCount > 0) btn.classList.add('active-patients');
+
+        btn.innerHTML = `
+            ${unit.name}
+            <small>${patCount} Patienten</small>
+        `;
+        btn.onclick = () => selectDestination(unit);
+        container.appendChild(btn);
+    });
+
+    // 2. Custom Separator/Input
+    const customDiv = document.createElement('div');
+    customDiv.style.gridColumn = "1 / -1";
+    customDiv.style.marginTop = "1rem";
+    customDiv.style.borderTop = "1px solid #var(--border)";
+    customDiv.style.paddingTop = "1rem";
+
+    // Using inline styles for simplicity, or adding classes? keeping it simple for now.
+    customDiv.innerHTML = `
+        <label style="display:block; margin-bottom:0.5rem; font-weight:bold; color:var(--text);">Oder anderes Ziel:</label>
+        <div style="display:flex; gap:0.5rem;">
+            <input type="text" id="dest-custom-input" placeholder="z.B. Uniklinik, KH ..." style="flex:1; padding:0.5rem; border:1px solid var(--border); border-radius:4px; font-size:1rem;">
+            <button class="btn-primary" onclick="submitCustomDestination()">Setzen</button>
+        </div>
+    `;
+    container.appendChild(customDiv);
+
+    document.getElementById('destination-modal').classList.add('open');
+}
+
+async function selectDestination(ambulanzSquad) {
+    const sId = pendingDestinationSquadId;
+    if (!sId) return;
+
+    closeModal('destination-modal');
+
+    // 1. Set Status to zAO (7)
+    await performStatusUpdate(sId, '7');
+
+    // 2. Assign Ambulanz to the ACTIVE mission of this squad
+    let squad = squadsData.find(s => s.id === sId);
+    if (squad && squad.active_mission) {
+
+        let m = squad.active_mission;
+
+        // Safety: Ensure we have the full mission (with squad_ids)
+        if (!m.squad_ids) {
+            const fullM = missionsData.find(mis => mis.id === m.id);
+            if (fullM) {
+                m = fullM;
+            } else {
+                // Fallback if not found in missionsData (rare)
+                // We'll trust the backend add if we just send specific update? 
+                // But the API likely replaces the list.
+                console.error("Mission not found in local data, cannot safely assign Ambulanz.");
+                return;
+            }
+        }
+
+        if (!m.squad_ids.includes(ambulanzSquad.id)) {
+            const newIds = [...m.squad_ids, ambulanzSquad.id];
+            try {
+                await fetch(`/api/missions/${m.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ squad_ids: newIds })
+                });
+                console.log(`Assigned ${ambulanzSquad.name} to mission via zAO trigger.`);
+            } catch (e) {
+                console.error("Error assigning Ambulanz:", e);
+                alert("Fehler beim Zuweisen der Ambulanz.");
+            }
+        }
+    }
+}
+
+async function submitCustomDestination() {
+    const sId = pendingDestinationSquadId;
+    if (!sId) return;
+
+    const val = document.getElementById('dest-custom-input').value.trim();
+    if (!val) {
+        alert("Bitte Ziel eingeben.");
+        return;
+    }
+
+    closeModal('destination-modal');
+
+    // 1. Set Status to zAO (7)
+    await performStatusUpdate(sId, '7');
+
+    // 2. Set Custom Location Override
+    try {
+        await fetch(`/api/squads/${sId}/location`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ location: val })
+        });
+    } catch (e) {
+        console.error("Error setting custom location:", e);
+    }
 }
 
 function processNextNebConflict() {
@@ -808,7 +1006,10 @@ function openSquadModal() {
 
     // Reset Modal State for New Squad
     document.getElementById('squad-modal-title').textContent = 'Neuer Trupp';
+    document.getElementById('squad-modal-title').textContent = 'Neuer Trupp';
     document.getElementById('btn-delete-squad').style.display = 'none';
+    document.getElementById('btn-show-qr').style.display = 'none';
+    document.getElementById('qr-code-container').style.display = 'none';
 
     document.getElementById('squad-modal').classList.add('open');
 }
@@ -823,8 +1024,55 @@ function editSquad(squad) {
     // Set Modal State for Edit
     document.getElementById('squad-modal-title').textContent = 'Trupp bearbeiten';
     document.getElementById('btn-delete-squad').style.display = 'block';
+    document.getElementById('btn-show-qr').style.display = 'block';
+
+    // Reset QR Area
+    document.getElementById('qr-code-container').style.display = 'none';
+    document.getElementById('qrcode').innerHTML = '';
 
     document.getElementById('squad-modal').classList.add('open');
+}
+
+function showSquadQR() {
+    const id = document.getElementById('s-id').value;
+    const squad = squadsData.find(s => s.id == id);
+    if (!squad || !squad.access_token) {
+        alert("Kein Access Token gefunden. Bitte Seite aktualisieren.");
+        return;
+    }
+
+    const container = document.getElementById('qr-code-container');
+    const qrDiv = document.getElementById('qrcode');
+    const link = document.getElementById('qr-link');
+
+    if (container.style.display === 'block') {
+        container.style.display = 'none';
+        return;
+    }
+
+    qrDiv.innerHTML = '';
+    const url = `${window.location.origin}/squad/mobile-view?token=${squad.access_token}`;
+
+    new QRCode(qrDiv, {
+        text: url,
+        width: 128,
+        height: 128
+    });
+
+    link.href = url;
+    container.style.display = 'block';
+}
+
+// Squad Management
+function toggleSquadFields() {
+    const type = document.getElementById('s-type').value;
+    const groupNumbers = document.getElementById('group-numbers');
+
+    // Example: Hide service numbers for Ambulanz if desired?
+    // User didn't ask, but Ambulanz usually is a place.
+    // Let's keep it visible but maybe optional.
+    // If Ambulanz, maybe hide Qualification?
+    // Currently just a placeholder function if needed.
 }
 
 async function submitSquad(e) {
@@ -832,28 +1080,41 @@ async function submitSquad(e) {
     const id = document.getElementById('s-id').value;
     const name = document.getElementById('s-name').value;
     const qual = document.getElementById('s-qual').value;
-    const service_numbers = document.getElementById('s-numbers').value;
+    const type = document.getElementById('s-type').value; // Get Type
+    const numbers = document.getElementById('s-numbers').value;
 
-    if (id) {
-        // Edit
-        await fetch(`/api/squads/${id}`, {
-            method: 'PUT',
+    const payload = {
+        name: name,
+        qualification: qual,
+        type: type, // Send Type
+        service_numbers: numbers
+    };
+
+    try {
+        let url = '/api/squads';
+        let method = 'POST';
+
+        if (id) {
+            url = `/api/squads/${id}`;
+            method = 'PUT';
+        }
+
+        const response = await fetch(url, {
+            method: method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, qualification: qual, service_numbers })
+            body: JSON.stringify(payload)
         });
-    } else {
-        // Create
-        await fetch('/api/squads', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, qualification: qual, service_numbers })
-        });
+
+        if (response.ok) {
+            closeModal('squad-modal');
+            loadData();
+        } else {
+            console.error('Error saving squad');
+        }
+    } catch (error) {
+        console.error('Error:', error);
     }
-
-    closeModal('squad-modal');
-    loadData();
 }
-
 // --- Manual Location Override ---
 function openLocationModal(squadId, currentLocation) {
     document.getElementById('loc-squad-id').value = squadId;
@@ -1990,8 +2251,8 @@ function renderMobileView() {
     list.innerHTML = '';
 
     squadsData.forEach(squad => {
-        const btn = document.createElement('button');
-        btn.className = 'mobile-squad-btn';
+        const item = document.createElement('div');
+        item.className = 'mobile-squad-item';
 
         // Status Class
         const statusMap = {
@@ -2000,30 +2261,39 @@ function renderMobileView() {
             '4': { label: 'BO', class: 's4' },
             '7': { label: 'zAO', class: 's7' },
             '8': { label: 'AO', class: 's8' },
-            'Pause': { label: 'P', class: 'sP' },
+            'Pause': { label: 'Pause', class: 'sP' },
             'NEB': { label: 'NEB', class: 'sNEB' },
             'Integriert': { label: 'Disp.', class: 'sDip' },
             '1': { label: 'Frei', class: 's1' }
         };
         const st = statusMap[squad.current_status] || { label: squad.current_status, class: 's1' };
 
-        btn.innerHTML = `
-            <span class="squad-name">${squad.name}</span>
-            <span class="status-indicator ${st.class}">${st.label}</span>
+        // Two zones:
+        // Left: Name -> Mission Overlay
+        // Right: Status -> Status Modal
+        item.innerHTML = `
+            <div class="mobile-squad-name" onclick="showMobileSquadMissions(${squad.id})">
+                ${squad.name}
+            </div>
+            <div class="mobile-squad-status ${st.class}" onclick="openMobileStatusSelect(${squad.id})">
+                ${st.label}
+            </div>
         `;
-
-        btn.onclick = () => showMobileSquadMissions(squad);
-        list.appendChild(btn);
+        list.appendChild(item);
     });
 }
 
-function showMobileSquadMissions(squad) {
+function showMobileSquadMissions(squadId) {
+    const squad = squadsData.find(s => s.id === squadId);
+    if (!squad) return;
+
     const overlay = document.getElementById('mobile-mission-overlay');
     const title = document.getElementById('mobile-overlay-title');
     const list = document.getElementById('mobile-mission-list');
 
     if (title) title.innerText = squad.name;
     list.innerHTML = '';
+    // ... (rest is unchanged logic, reusing)
 
     // Filter Active Missions for this Squad
     // Filter logic same as backend or desktop: active missions where this squad is assigned
@@ -2060,6 +2330,25 @@ function showMobileSquadMissions(squad) {
 
 function closeMobileMissionOverlay() {
     document.getElementById('mobile-mission-overlay').classList.add('hidden');
+}
+
+let activeMobileSquadId = null;
+
+function openMobileStatusSelect(squadId) {
+    activeMobileSquadId = squadId;
+    document.getElementById('mobile-status-modal').classList.remove('hidden');
+}
+
+function closeMobileStatusModal() {
+    document.getElementById('mobile-status-modal').classList.add('hidden');
+    activeMobileSquadId = null;
+}
+
+function setMobileStatus(status) {
+    if (activeMobileSquadId) {
+        setSquadStatus(activeMobileSquadId, status);
+        closeMobileStatusModal();
+    }
 }
 
 // Add Resize Listener

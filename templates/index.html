@@ -109,72 +109,76 @@
                 <button class="close-btn" onclick="closeModal('tutorial-modal')">&times;</button>
             </div>
             <div class="tutorial-body">
-                <!-- Slide 1: Welcome -->
+                <!-- Slide 1: Welcome & Setup -->
                 <div class="tutorial-slide active" data-step="0">
-                    <h3>Willkommen bei Johanniter Mission Control</h3>
-                    <p>Diese Anwendung unterstützt Sie bei der digitalen Einsatzleitung und Protokollierung.</p>
+                    <h3>Willkommen bei Mission Control</h3>
+                    <p>Die moderne Lösung für Ihre Einsatzleitung – jetzt mit Multi-Device Support.</p>
                     <div class="tutorial-feature-list">
                         <div class="feature-item">
                             <span class="feature-icon">🚀</span>
-                            <strong>Dienst starten</strong>
-                            <p>Konfigurieren Sie Einsatzort und initiale Ressourcen.</p>
+                            <strong>Dienst Starten & Beitreten</strong>
+                            <p>Starten Sie einen neuen Dienst oder treten Sie einer laufenden Sitzung via Passwort bei.
+                            </p>
                         </div>
                         <div class="feature-item">
-                            <span class="feature-icon">👥</span>
-                            <strong>Trupps verwalten</strong>
-                            <p>Status per Klick ändern, neue Trupps hinzufügen.</p>
-                        </div>
-                        <div class="feature-item">
-                            <span class="feature-icon">📝</span>
-                            <strong>Einsätze</strong>
-                            <p>Vollständige Dokumentation von Alarmierung bis Abschluss.</p>
+                            <span class="feature-icon">📱</span>
+                            <strong>Multi-Device Sync</strong>
+                            <p>Alle Daten werden in Echtzeit zwischen Leitstelle und mobilen Geräten synchronisiert.</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Slide 2: Squads -->
+                <!-- Slide 2: Squads & Ambulances -->
                 <div class="tutorial-slide" data-step="1">
-                    <h3>Trupp-Verwaltung</h3>
-                    <p>Behalten Sie den Überblick über alle Einheiten.</p>
+                    <h3>Trupps & Ambulanzen</h3>
+                    <p>Unterscheiden Sie jetzt zwischen Sanitäts-Trupps und Ambulanzen.</p>
                     <ul>
-                        <li><strong>Status ändern:</strong> Klicken Sie direkt auf die Buttons (EB, BO, AO, ...).</li>
-                        <li><strong>Timer:</strong> Sehen Sie sofort, wie lange ein Trupp schon im aktuellen Status ist.
-                        </li>
-                        <li><strong>Bearbeiten:</strong> Nutzen Sie das Stift-Symbol ✎ beim Trupp, um Besatzung oder
-                            Qualifikation zu ändern.</li>
-                        <li><strong>Sortieren:</strong> Verschieben Sie Trupps per Drag & Drop, um die Reihenfolge
-                            anzupassen.</li>
+                        <li><strong>Trupps:</strong> Klassische Einheiten (San/RS). Status-Buttons: EB, zBO, BO, zAO,
+                            AO.</li>
+                        <li><strong>Ambulanzen:</strong> Eigene Logik (Frei/Besetzt) und Patienten-Zähler.</li>
+                        <li><strong>QR-Login:</strong> Jeder Trupp hat einen eigenen QR-Code. Scannen, um die mobile
+                            Ansicht für diesen Trupp zu öffnen.</li>
                     </ul>
                     <div class="tutorial-tip">
-                        💡 <strong>Tipp:</strong> Sie können jederzeit neue Trupps über das <strong>+</strong> Symbol in
-                        der Trupp-Leiste hinzufügen.
+                        💡 <strong>Tipp:</strong> Klicken Sie auf das ✎-Symbol, um den QR-Code eines Trupps anzuzeigen.
                     </div>
                 </div>
 
-                <!-- Slide 3: Missions -->
+                <!-- Slide 3: Smart Status Logic -->
                 <div class="tutorial-slide" data-step="2">
-                    <h3>Einsatz-Erfassung</h3>
-                    <p>Erstellen Sie neue Einsätze über <strong>+ Neuer Einsatz</strong>.</p>
+                    <h3>Intelligente Status-Logik</h3>
+                    <p>Das System denkt mit und spart Klicks.</p>
                     <ul>
-                        <li><strong>Zuordnung:</strong> Wählen Sie beteiligte Trupps direkt aus.</li>
-                        <li><strong>Drag & Drop:</strong> Ziehen Sie einen Trupp auf einen offenen Einsatz, um ihn
-                            direkt zuzuweisen.</li>
-                        <li><strong>Live-Status:</strong> Der Status der Trupps wird im Einsatz angezeigt.</li>
-                        <li><strong>Abschluss:</strong> Wenn ein Einsatz beendet ist, wählen Sie einen Ausgang (z.B.
-                            "Belassen").</li>
+                        <li><strong>zAO (Status 7):</strong> Öffnet automatisch die <strong>Ziel-Auswahl</strong>.
+                            Wählen Sie direkt eine freie Ambulanz oder geben Sie ein Krankenhaus an.</li>
+                        <li><strong>Automatisierung:</strong>
+                            <br>- Alarmierung setzt Trupp auf "Disponiert".
+                            <br>- Patienten-Zuweisung setzt Ambulanz auf "Besetzt".
+                        </li>
                     </ul>
                 </div>
 
-                <!-- Slide 4: Protocol & Export -->
+                <!-- Slide 4: Missions -->
                 <div class="tutorial-slide" data-step="3">
-                    <h3>Protokoll & Export</h3>
-                    <p>Alles wird im Hintergrund mitgeschrieben.</p>
+                    <h3>Einsatz-Management</h3>
+                    <p>Volle Kontrolle über alle Lagen.</p>
                     <ul>
-                        <li><strong>Protokoll:</strong> Klicken Sie auf "Protokoll", um den gesamten Verlauf zu sehen.
-                        </li>
-                        <li><strong>Änderungen:</strong> Das Ticker-Band unten zeigt immer die letzte Aktivität.</li>
-                        <li><strong>Export:</strong> Nutzen Sie "Exportieren", um eine Textdatei für Ihre Ablage zu
-                            generieren.</li>
+                        <li><strong>Drag & Drop:</strong> Ziehen Sie Trupps einfach auf einen Einsatz, um sie
+                            zuzuweisen.</li>
+                        <li><strong>Live-Updates:</strong> Einsatz-Status und Positionen aktualisieren sich sofort.</li>
+                        <li><strong>Übergabe (Handover):</strong> Nutzen Sie beim Abschluss die Option "Übergeben", um
+                            Ziel (z.B. RTW 12/83-1) und Notizen festzuhalten.</li>
+                    </ul>
+                </div>
+
+                <!-- Slide 5: Mobile View -->
+                <div class="tutorial-slide" data-step="4">
+                    <h3>Mobile Ansicht</h3>
+                    <p>Optimiert für Smartphones und Tablets.</p>
+                    <ul>
+                        <li><strong>Echtzeit:</strong> Kein Neuladen nötig. Neue Einsätze erscheinen sofort.</li>
+                        <li><strong>Fokus:</strong> Zeigt nur relevante Status-Optionen an.</li>
+                        <li><strong>Große Buttons:</strong> Einfache Bedienung auch in hektischen Situationen.</li>
                     </ul>
                 </div>
             </div>
@@ -182,6 +186,7 @@
             <div class="tutorial-footer">
                 <div class="step-dots">
                     <span class="dot active"></span>
+                    <span class="dot"></span>
                     <span class="dot"></span>
                     <span class="dot"></span>
                     <span class="dot"></span>
@@ -257,6 +262,7 @@
             </div>
 
             <div class="header-actions">
+                <button id="btn-custom-log" onclick="addCustomLogEvent()">+ Ereignis</button>
                 <button id="btn-log" onclick="openLogModal()">Protokoll</button>
                 <button id="btn-export" onclick="openExportModal()">Exportieren</button>
                 <button id="btn-end-shift" onclick="endShift()" class="btn-danger">Dienst beenden</button>
@@ -312,6 +318,21 @@
             </div>
             <div id="mobile-mission-list" class="mobile-mission-list">
                 <!-- Active Missions for Squad go here -->
+            </div>
+        </div>
+
+        <!-- Mobile Status Selection Modal -->
+        <div id="mobile-status-modal" class="mobile-overlay hidden">
+            <div class="mobile-overlay-header">
+                <button class="back-btn" onclick="closeMobileStatusModal()">← Abbrechen</button>
+                <h2>Status wählen</h2>
+            </div>
+            <div class="mobile-status-grid">
+                <button class="status-btn-large s2" onclick="setMobileStatus('2')">EB (Einsatzbereit)</button>
+                <button class="status-btn-large s3" onclick="setMobileStatus('3')">zBO (Zum Berufungsort)</button>
+                <button class="status-btn-large s4" onclick="setMobileStatus('4')">BO (Am Berufungsort)</button>
+                <button class="status-btn-large s7" onclick="setMobileStatus('7')">zAO (Zum Abgabeort)</button>
+                <button class="status-btn-large s8" onclick="setMobileStatus('8')">AO (Am Abgabeort)</button>
             </div>
         </div>
     </div>
@@ -435,6 +456,13 @@
             <form id="s-form" onsubmit="submitSquad(event)">
                 <input type="hidden" id="s-id">
                 <div class="form-group">
+                    <label>Typ</label>
+                    <select id="s-type" onchange="toggleSquadFields()">
+                        <option value="Trupp" selected>Trupp</option>
+                        <option value="Ambulanz">Ambulanz / BHP</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>Name</label>
                     <input type="text" id="s-name" required>
                 </div>
@@ -442,13 +470,20 @@
                     <label>Qualifikation</label>
                     <input type="text" id="s-qual" placeholder="San, RS, NFS...">
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="group-numbers">
                     <label>Dienstnummern</label>
                     <input type="text" id="s-numbers" placeholder="z.B. 1234, 5678">
+                </div>
+                <div id="qr-code-container" style="display:none; text-align:center; margin-bottom:1rem;">
+                    <div id="qrcode" style="display:inline-block;"></div>
+                    <p style="margin-top:0.5rem;"><a id="qr-link" href="#" target="_blank"
+                            style="color: var(--primary-color);">Link öffnen</a></p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" id="btn-delete-squad" class="btn-danger" onclick="deleteSquad()"
                         style="display:none;">Löschen</button>
+                    <button type="button" id="btn-show-qr" class="btn-secondary" onclick="showSquadQR()"
+                        style="display:none;">QR-Code anzeigen</button>
                     <!-- Cancel Removed -->
                     <button type="submit" class="btn-primary">Speichern</button>
                 </div>
@@ -629,6 +664,44 @@
         </div>
     </div>
 
+    <!-- Destination Selection Modal -->
+    <div id="destination-modal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h2>Zielort wählen</h2>
+                <button class="close-btn" onclick="closeModal('destination-modal')">&times;</button>
+            </div>
+            <p>Wohin wird der Patient gebracht?</p>
+            <div id="destination-options" class="destination-grid">
+                <!-- Ambulanz buttons injected here -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn-gray" onclick="closeModal('destination-modal')">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Event Input Modal -->
+    <div id="custom-event-modal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h2>Neues Ereignis festhalten</h2>
+                <button class="close-btn" onclick="closeModal('custom-event-modal')">&times;</button>
+            </div>
+            <form onsubmit="submitCustomEvent(event)">
+                <div class="form-group">
+                    <label>Ereignis / Notiz</label>
+                    <textarea id="custom-event-input" rows="3"
+                        placeholder="z.B. Besuch von Einsatzleiter, Materialausgabe..." required
+                        style="width: 100%;"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Export Selection Modal -->
     <div id="export-modal" class="modal">
         <div class="modal-content small" style="text-align: center;">
@@ -648,7 +721,8 @@
     </div>
 
     <div id="guide-overlay" class="guide-overlay"></div>
-    <script src="{{ url_for('static', filename='script.js') }}?v={{ last_updated }}"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=FIXED_SESSION_V5"></script>
     <script>
         // Inline Weather Script for maximum reliability
 

@@ -1293,6 +1293,286 @@ th {
     text-align: center;
 }
 
+/* Mobile View Styles */
+#desktop-view-container.hidden {
+    display: none !important;
+}
+
+#mobile-view-container.hidden {
+    display: none !important;
+}
+
+#mobile-view-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.mobile-header {
+    background: var(--header-bg);
+    color: white;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.mobile-header h1 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.mobile-squad-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+/* Updated Mobile Item for Logic Split */
+.mobile-squad-item {
+    display: flex;
+    align-items: stretch;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    min-height: 80px;
+    /* Touch friendly height */
+}
+
+/* Left: Name Area (Go to Mission View) */
+.mobile-squad-name {
+    flex: 2;
+    /* Takes more space */
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    font-size: 1.1rem;
+    font-weight: bold;
+    border-right: 1px solid var(--border);
+    cursor: pointer;
+    background: var(--surface);
+}
+
+.mobile-squad-name:active {
+    background: #f0f0f0;
+}
+
+/* Right: Status Area (Open Status Modal) */
+.mobile-squad-status {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    color: white;
+    /* Default for most */
+    transition: background-color 0.2s;
+}
+
+.mobile-squad-status:active {
+    filter: brightness(0.9);
+}
+
+/* Specific Status Backgrounds for Mobile List to ensure visibility */
+.mobile-squad-status.s2 {
+    background-color: var(--c-2);
+}
+
+.mobile-squad-status.s3 {
+    background-color: var(--c-3);
+}
+
+.mobile-squad-status.s4 {
+    background-color: var(--c-4);
+}
+
+.mobile-squad-status.s7 {
+    background-color: var(--c-7);
+}
+
+.mobile-squad-status.s8 {
+    background-color: var(--c-8);
+}
+
+.mobile-squad-status.sP {
+    background-color: var(--c-P);
+}
+
+.mobile-squad-status.sNEB {
+    background-color: var(--c-NEB);
+}
+
+.mobile-squad-status.sDip {
+    background-color: var(--c-Dip);
+    color: black;
+}
+
+.mobile-squad-status.s1 {
+    background-color: #9e9e9e;
+    /* Grey default for Frei */
+    color: white;
+}
+
+/* Mobile Overlays (Missions & Status) */
+.mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+}
+
+.mobile-overlay.hidden {
+    display: none;
+}
+
+.mobile-overlay-header {
+    padding: 1rem;
+    background: var(--header-bg);
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.mobile-overlay-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    flex: 1;
+    text-align: center;
+    margin-right: 2rem;
+    /* Balance back button */
+}
+
+.back-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+/* Mobile Mission List */
+.mobile-mission-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.mobile-mission-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.mobile-mission-card h3 {
+    margin: 0 0 0.5rem 0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.mobile-mission-row {
+    margin-bottom: 0.3rem;
+    line-height: 1.4;
+}
+
+.mobile-empty-msg {
+    text-align: center;
+    color: var(--text-secondary);
+    margin-top: 2rem;
+}
+
+/* Status Selection Grid */
+.mobile-status-grid {
+    flex: 1;
+    padding: 1rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    /* 2 columns */
+    gap: 1rem;
+    overflow-y: auto;
+}
+
+.status-btn-large {
+    border: none;
+    border-radius: 8px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: white;
+    padding: 1rem;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.status-btn-large:active {
+    transform: scale(0.98);
+}
+
+.status-btn-large.s1 {
+    background-color: #ffe082;
+    color: #5d4037;
+}
+
+/* Frei - custom */
+
+/* Status Classes reuse existing logic where possible, but mapped here for large buttons if needed */
+/* We can rely on global .s2, .s3 etc but need background-color ensuring */
+
+.status-btn-large.s2 {
+    background-color: var(--c-2);
+}
+
+.status-btn-large.s3 {
+    background-color: var(--c-3);
+}
+
+.status-btn-large.s4 {
+    background-color: var(--c-4);
+}
+
+.status-btn-large.s7 {
+    background-color: var(--c-7);
+}
+
+.status-btn-large.s8 {
+    background-color: var(--c-8);
+}
+
+.status-btn-large.sP {
+    background-color: var(--c-P);
+}
+
+.status-btn-large.sNEB {
+    background-color: var(--c-NEB);
+}
+
+/* Force Mobile styles if screen is small (handled by JS toggling containers, but here for safety) */
+@media (max-width: 768px) {
+    /* Additional tweaks if managed by CSS media queries */
+}
+
 /* Tutorial Modal Styles */
 .modal-content.large {
     max-width: 800px;
@@ -2110,4 +2390,135 @@ body.dark-mode .inline-mission-note:hover {
 body.dark-mode .inline-mission-note:focus {
     border-color: var(--primary);
     background-color: #1e1e1e;
+}
+
+/* Destination Modal Styles */
+.destination-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+/* Silent Alarm Overlay */
+@keyframes pulse-red {
+    0% {
+        background-color: rgba(255, 0, 0, 0.9);
+    }
+
+    50% {
+        background-color: rgba(200, 0, 0, 0.9);
+    }
+
+    100% {
+        background-color: rgba(255, 0, 0, 0.9);
+    }
+}
+
+@keyframes blink-text {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+.alert-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: #ff0000;
+    z-index: 9999;
+    display: none;
+    /* Hidden by default */
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    animation: pulse-red 1s infinite;
+    padding: 2rem;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.alert-title {
+    color: white;
+    font-size: 3rem;
+    font-weight: 900;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    animation: blink-text 0.5s infinite;
+}
+
+.alert-reason {
+    color: white;
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 3rem;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1rem;
+    border-radius: 12px;
+}
+
+.alert-btn {
+    background-color: white;
+    color: red;
+    font-size: 1.5rem;
+    font-weight: bold;
+    padding: 1.5rem 3rem;
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    text-transform: uppercase;
+    transition: transform 0.2s;
+}
+
+.alert-btn:active {
+    transform: scale(0.95);
+}
+}
+
+.destination-btn {
+    padding: 1rem;
+    font-size: 1.1rem;
+    font-weight: bold;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.destination-btn:hover {
+    background: var(--bg);
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.destination-btn.active-patients {
+    border-left: 4px solid var(--primary);
+}
+
+.destination-btn small {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: normal;
+    color: var(--text-secondary);
 }
