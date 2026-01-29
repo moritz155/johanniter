@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Einsatzleitung</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ last_updated }}">
+</head>
+
+<body>
+    <!-- Welcome Screen (shown when no active shift) -->
+    <div id="welcome-screen" class="welcome-screen">
+        <div class="welcome-left">
+            <div class="welcome-content">
+                <p class="welcome-copywrite">Ein Projekt von Noah Elvis Oberkofler und Moritz Schelten</p>
+                <h1>Johanniter<br>Mission Control</h1>
+                <p class="welcome-subtitle">Einsatzleitung & Protokollierung</p>
+
+                <div class="welcome-actions">
+                    <button class="btn-welcome-primary" onclick="openShiftSetup()">
+                        Neuer Dienst
+                    </button>
+                    <button class="btn-welcome-secondary" onclick="openJoinModal()">
+                        Beitreten
+                    </button>
+                    <button class="btn-welcome-secondary" onclick="openTutorial()">
+                        Tutorial
+                    </button>
+                </div>
+
+            </div>
+        </div>
+        <div class="welcome-right">
+            <img src="/static/welcome-image.jpg" alt="Johanniter" class="welcome-image">
+        </div>
+    </div>
+
+    <!-- Shift Setup Modal (opened from welcome screen) -->
+    <div id="shift-setup-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Dienst konfigurieren</h2>
+                <button class="close-btn" onclick="closeModal('shift-setup-modal')">&times;</button>
+            </div>
+            <form id="shift-setup-form" onsubmit="startShift(event)">
+                <div class="form-group">
+                    <label>Name des Dienstes / Einsatzort (Optional)</label>
+                    <input type="text" id="conf-location" placeholder="z.B. Stadtfest">
+                </div>
+                <div class="form-group">
+                    <label>Adresse (Optional)</label>
+                    <input type="text" id="conf-address" placeholder="Musterstraße 1">
+                </div>
+                <!-- Password Field -->
+                <div class="form-group">
+                    <label>Passwort (für Beitritt von anderen Geräten)</label>
+                    <input type="password" id="conf-password" placeholder="Passwort festlegen" required>
+                    <small>Dieses Passwort wird benötigt, um dem Dienst beizutreten.</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Dienstbeginn (Optional)</label>
+                    <input type="datetime-local" id="conf-start">
+                    <small>Leer lassen für "Jetzt"</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Anzahl initialer Trupps</label>
+                    <div class="number-control">
+                        <div class="btn-counter" onclick="changeSquadCount(-1)">-</div>
+                        <input type="number" id="conf-squad-count" min="0" max="20" value="0" readonly>
+                        <div class="btn-counter" onclick="changeSquadCount(1)">+</div>
+                    </div>
+                    <div id="squad-inputs-container" class="squad-inputs-grid"></div>
+                </div>
+
+                <div style="text-align: right;">
+                    <button type="submit" class="btn-primary">Dienst starten</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Join Modal -->
+    <div id="join-modal" class="modal">
+        <div class="modal-content small-modal">
+            <div class="modal-header">
+                <h2>Dienst beitreten</h2>
+                <button class="close-btn" onclick="closeModal('join-modal')">&times;</button>
+            </div>
+            <form id="join-form" onsubmit="joinShift(event)">
+                <div class="form-group">
+                    <label>Passwort</label>
+                    <input type="password" id="join-password" placeholder="Dienst-Passwort eingeben" required>
+                </div>
+                <div style="text-align: right;">
+                    <button type="submit" class="btn-primary">Beitreten</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tutorial Modal -->
+    <div id="tutorial-modal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2>Tutorial - Mission Control</h2>
+                <button class="close-btn" onclick="closeModal('tutorial-modal')">&times;</button>
+            </div>
+            <div class="tutorial-body">
+                <!-- Slide 1: Welcome & Setup -->
+                <div class="tutorial-slide active" data-step="0">
+                    <h3>Willkommen bei Mission Control</h3>
+                    <p>Die moderne Lösung für Ihre Einsatzleitung – jetzt mit Multi-Device Support.</p>
+                    <div class="tutorial-feature-list">
+                        <div class="feature-item">
+                            <span class="feature-icon">🚀</span>
+                            <strong>Dienst Starten & Beitreten</strong>
+                            <p>Starten Sie einen neuen Dienst oder treten Sie einer laufenden Sitzung via Passwort bei.
+                            </p>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">📱</span>
+                            <strong>Multi-Device Sync</strong>
+                            <p>Alle Daten werden in Echtzeit zwischen Leitstelle und mobilen Geräten synchronisiert.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Slide 2: Squads & Ambulances -->
+                <div class="tutorial-slide" data-step="1">
+                    <h3>Trupps & Ambulanzen</h3>
+                    <p>Unterscheiden Sie jetzt zwischen Sanitäts-Trupps und Ambulanzen.</p>
+                    <ul>
+                        <li><strong>Trupps:</strong> Klassische Einheiten (San/RS). Status-Buttons: EB, zBO, BO, zAO,
+                            AO.</li>
+                        <li><strong>Ambulanzen:</strong> Eigene Logik (Frei/Besetzt) und Patienten-Zähler.</li>
+                        <li><strong>QR-Login:</strong> Jeder Trupp hat einen eigenen QR-Code. Scannen, um die mobile
+                            Ansicht für diesen Trupp zu öffnen.</li>
+                    </ul>
+                    <div class="tutorial-tip">
+                        💡 <strong>Tipp:</strong> Klicken Sie auf das ✎-Symbol, um den QR-Code eines Trupps anzuzeigen.
+                    </div>
+                </div>
+
+                <!-- Slide 3: Smart Status Logic -->
+                <div class="tutorial-slide" data-step="2">
+                    <h3>Intelligente Status-Logik</h3>
+                    <p>Das System denkt mit und spart Klicks.</p>
+                    <ul>
+                        <li><strong>zAO (Status 7):</strong> Öffnet automatisch die <strong>Ziel-Auswahl</strong>.
+                            Wählen Sie direkt eine freie Ambulanz oder geben Sie ein Krankenhaus an.</li>
+                        <li><strong>Automatisierung:</strong>
+                            <br>- Alarmierung setzt Trupp auf "Disponiert".
+                            <br>- Patienten-Zuweisung setzt Ambulanz auf "Besetzt".
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Slide 4: Missions -->
+                <div class="tutorial-slide" data-step="3">
+                    <h3>Einsatz-Management</h3>
+                    <p>Volle Kontrolle über alle Lagen.</p>
+                    <ul>
+                        <li><strong>Drag & Drop:</strong> Ziehen Sie Trupps einfach auf einen Einsatz, um sie
+                            zuzuweisen.</li>
+                        <li><strong>Live-Updates:</strong> Einsatz-Status und Positionen aktualisieren sich sofort.</li>
+                        <li><strong>Übergabe (Handover):</strong> Nutzen Sie beim Abschluss die Option "Übergeben", um
+                            Ziel (z.B. RTW 12/83-1) und Notizen festzuhalten.</li>
+                    </ul>
+                </div>
+
+                <!-- Slide 5: Mobile View -->
+                <div class="tutorial-slide" data-step="4">
+                    <h3>Mobile Ansicht</h3>
+                    <p>Optimiert für Smartphones und Tablets.</p>
+                    <ul>
+                        <li><strong>Echtzeit:</strong> Kein Neuladen nötig. Neue Einsätze erscheinen sofort.</li>
+                        <li><strong>Fokus:</strong> Zeigt nur relevante Status-Optionen an.</li>
+                        <li><strong>Große Buttons:</strong> Einfache Bedienung auch in hektischen Situationen.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="tutorial-footer">
+                <div class="step-dots">
+                    <span class="dot active"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+                <div class="tutorial-buttons">
+                    <button id="btn-tut-prev" class="btn-secondary" onclick="prevTutorialStep()"
+                        disabled>Zurück</button>
+                    <button id="btn-tut-next" class="btn-primary" onclick="nextTutorialStep()">Weiter</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="desktop-view-container">
+        <header>
+            <div class="header-left">
+                <div class="header-title-row">
+                    <h1>Einsatzleitung</h1>
+                    <button id="btn-config" class="icon-btn header-icon-btn" onclick="openConfigModal()"
+                        title="Dienst bearbeiten">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                            </path>
+                        </svg>
+                    </button>
+                    <button id="btn-help" class="icon-btn header-icon-btn" onclick="openTutorial()"
+                        title="Hilfe / Tutorial">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </button>
+                    <button id="btn-theme-toggle" class="icon-btn header-icon-btn" onclick="toggleTheme()"
+                        title="Dark/Light Mode">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                    </button>
+                    <button id="btn-color-picker" class="icon-btn header-icon-btn"
+                        onclick="document.getElementById('theme-color-input').click()" title="Farbe ändern">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="13.5" cy="6.5" r=".5"></circle>
+                            <circle cx="17.5" cy="10.5" r=".5"></circle>
+                            <circle cx="8.5" cy="7.5" r=".5"></circle>
+                            <circle cx="6.5" cy="12.5" r=".5"></circle>
+                            <path
+                                d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.063 0-1.125.75-2.062 1.688-2.062H18c2.25 0 4-1.75 4-4V8c0-5.5-4.5-6-10-6z">
+                            </path>
+                        </svg>
+                    </button>
+                    <input type="color" id="theme-color-input" style="display:none;"
+                        onchange="setHeaderColor(this.value)">
+                </div>
+                <span id="shift-location" class="subtitle"></span>
+            </div>
+
+            <div class="header-center">
+                <div class="time-container">
+                    <div id="clock" class="clock">--:--:--</div>
+                    <div id="date" class="date">--.--.----</div>
+                </div>
+                <div id="weather-widget" class="weather-widget hidden">
+                    <span id="weather-icon" class="weather-icon"></span>
+                    <span id="weather-temp" class="weather-temp">--°C</span>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <button id="btn-custom-log" onclick="addCustomLogEvent()">+ Ereignis</button>
+                <button id="btn-log" onclick="openLogModal()">Protokoll</button>
+                <button id="btn-export" onclick="openExportModal()">Exportieren</button>
+                <button id="btn-end-shift" onclick="endShift()" class="btn-danger">Dienst beenden</button>
+            </div>
+        </header>
+
+        <main>
+            <!-- Squad Panel -->
+            <section class="squad-panel">
+                <div class="panel-header">
+                    <span>Trupp-Übersicht</span>
+                    <button class="btn-gray" onclick="openSquadModal()">+ Neuer Trupp</button>
+                </div>
+                <div id="squad-list" class="squad-list">
+                    <!-- Squads loaded here -->
+                </div>
+            </section>
+
+            <!-- Mission Panel -->
+            <section class="mission-panel">
+                <div class="panel-header" id="mission-panel-header">
+                    <span>Einsatztagebuch <span id="mission-stats"></span></span>
+                    <button class="btn-gray" onclick="openNewMissionModal()">+ Neuer Einsatz</button>
+                </div>
+                <div id="mission-list" class="mission-list">
+                    <!-- Missions loaded here -->
+                </div>
+            </section>
+        </main>
+
+        <!-- Logs / Ticker Bar -->
+        <footer id="ticker-bar">
+            <span>Letzte Änderung: <span id="last-log">...</span></span>
+            <span class="ticker-copyright">&copy; Noah Elvis Oberkofler & Moritz Schelten</span>
+        </footer>
+    </div>
+
+    <!-- Mobile View Container -->
+    <div id="mobile-view-container" class="hidden">
+        <header class="mobile-header">
+            <h1>Trupp-Modus</h1>
+            <!-- Maybe a way to switch back or see title -->
+        </header>
+        <div id="mobile-squad-list" class="mobile-squad-list">
+            <!-- Big Buttons for Squads go here -->
+        </div>
+
+        <!-- Mobile Mission View (Overlay) -->
+        <div id="mobile-mission-overlay" class="mobile-overlay hidden">
+            <div class="mobile-overlay-header">
+                <button class="back-btn" onclick="closeMobileMissionOverlay()">← Zurück</button>
+                <h2 id="mobile-overlay-title">Trupp X</h2>
+            </div>
+            <div id="mobile-mission-list" class="mobile-mission-list">
+                <!-- Active Missions for Squad go here -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Mobile Status Selection Modal (Moved out to be shared/visible) -->
+    <div id="mobile-status-modal" class="mobile-overlay hidden">
+        <div class="mobile-overlay-header">
+            <button class="back-btn" onclick="closeMobileStatusModal()">← Abbrechen</button>
+            <h2>Status wählen</h2>
+        </div>
+        <div class="mobile-status-grid">
+            <button class="status-btn-large s2" onclick="setMobileStatus('2')">EB (Einsatzbereit)</button>
+            <button class="status-btn-large s3" onclick="setMobileStatus('3')">zBO (Zum Berufungsort)</button>
+            <button class="status-btn-large s4" onclick="setMobileStatus('4')">BO (Am Berufungsort)</button>
+            <button class="status-btn-large s7" onclick="setMobileStatus('7')">zAO (Zum Abgabeort)</button>
+            <button class="status-btn-large s8" onclick="setMobileStatus('8')">AO (Am Abgabeort)</button>
+        </div>
+    </div>
+
+    <!-- Mobile Admin View -->
+    <div id="mobile-admin-view" class="hidden">
+        <header class="mobile-header">
+            <div style="display:flex; align-items:center;">
+                <h1>Mobile Admin</h1>
+            </div>
+            <div class="mobile-header-actions">
+                <button onclick="mobileLogout()" class="btn-logout" aria-label="Logout">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="mobile-tabs">
+            <button id="mtab-missions" class="mobile-tab active" onclick="switchMobileTab('missions')">Einsätze</button>
+            <button id="mtab-squads" class="mobile-tab" onclick="switchMobileTab('squads')">Trupps</button>
+        </div>
+
+        <!-- Missions Content -->
+        <div id="mobile-tab-missions" class="mobile-tab-content active">
+            <div id="mobile-admin-mission-list">
+                <!-- Mission items rendered here -->
+            </div>
+            <!-- FAB for new mission -->
+            <button class="fab-btn" onclick="openNewMissionModal()">+</button>
+        </div>
+
+        <!-- Squads Content -->
+        <div id="mobile-tab-squads" class="mobile-tab-content">
+            <div id="mobile-admin-squad-list">
+                <!-- Squad items rendered here (with admin controls) -->
+            </div>
+        </div>
+    </div>
+
+    <!-- New Mission Modal -->
+    <div id="new-mission-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="mission-modal-title">Neuer Einsatz</h2>
+                <button class="close-btn" onclick="closeModal('new-mission-modal')">&times;</button>
+            </div>
+            <form id="new-mission-form">
+                <input type="hidden" id="edit-mission-id">
+
+                <div class="row">
+                    <div class="form-group half">
+                        <label>Einsatznummer (Optional)</label>
+                        <input type="text" id="m-number">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Einsatzort</label>
+                    <input type="text" id="m-location" list="list-location" required>
+                    <datalist id="list-location"></datalist>
+                </div>
+
+                <div class="form-group">
+                    <label>Alarmierende Stelle</label>
+                    <input type="text" id="m-entity" list="list-entity">
+                    <datalist id="list-entity"></datalist>
+                </div>
+
+                <div class="form-group">
+                    <label>Zugeordnete Trupps</label>
+                    <div id="m-squad-select" class="checkbox-group">
+                        <!-- Checkboxes injected by JS -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Berufungsgrund</label>
+                    <input type="text" id="m-reason" list="list-reason" required>
+                    <datalist id="list-reason"></datalist>
+                </div>
+
+                <div class="form-group">
+                    <label>Lagebeschreibung (Optional)</label>
+                    <textarea id="m-desc" rows="2"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Anmerkungen</label>
+                    <textarea id="m-notes" rows="2"></textarea>
+                </div>
+
+                <div class="form-group" id="outcome-group" style="display:none;">
+                    <label>Ausgang des Einsatzes <span style="color:red;">*</span></label>
+                    <select id="m-outcome" onchange="toggleEditArmFields()">
+                        <option value="">-- Bitte wählen --</option>
+                        <option value="Intervention unterblieben">Intervention unterblieben</option>
+                        <option value="Belassen">Belassen (vor Ort belassen)</option>
+                        <option value="ARM">Übergeben (Rettungsdienst / Andere)</option>
+                        <option value="PVW">PVW (Patient verweigert)</option>
+                        <option value="PVW">PVW (Patient verweigert)</option>
+                    </select>
+
+                    <div style="margin-top: 1rem;">
+                        <label>NACA-Score</label>
+                        <select id="m-naca">
+                            <option value="">-- Optional --</option>
+                            <option value="NACA 0 (Keine Erkrankung oder Verletzung)">NACA 0 (Keine Erkrankung oder
+                                Verletzung)</option>
+                            <option value="NACA I (Geringfügige Verletzung bzw. Funktionsstörung)">NACA I (Geringfügige
+                                Verletzung bzw. Funktionsstörung)</option>
+                            <option value="NACA II (Leichte bis mäßig schwere Funktionsstörung)">NACA II (Leichte bis
+                                mäßig schwere Funktionsstörung)</option>
+                            <option value="NACA III (Mäßige bis schwere, aber nicht lebensbedrohliche Störung)">NACA III
+                                (Mäßige bis schwere, aber nicht lebensbedrohliche Störung)</option>
+                            <option
+                                value="NACA IV (Schwere Störung, bei der die kurzfristige Entwicklung einer Lebensbedrohung nicht ausgeschlossen werden kann)">
+                                NACA IV (Schwere Störung, bei der die kurzfristige Entwicklung einer Lebensbedrohung
+                                nicht ausgeschlossen werden kann)</option>
+                            <option value="NACA V (Akute Lebensgefahr)">NACA V (Akute Lebensgefahr)</option>
+                            <option value="NACA VI (Atem- und/oder Kreislaufstillstand)">NACA VI (Atem- und/oder
+                                Kreislaufstillstand)</option>
+                            <option value="NACA VII (Tödliche Verletzung oder Erkrankung)">NACA VII (Tödliche Verletzung
+                                oder Erkrankung)</option>
+                        </select>
+                    </div>
+
+                    <div id="m-arm-fields"
+                        style="display:none; background: #f9f9f9; padding: 1rem; border-radius: 4px; margin-top: 1rem; border: 1px solid #eee;">
+                        <div style="display: flex; gap: 1rem;">
+                            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                                <input type="text" id="m-arm-type" placeholder="Typ (z.B. RTW)">
+                            </div>
+                            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                                <input type="text" id="m-arm-id" placeholder="Kennung (z.B. 12/83-1)">
+                            </div>
+                        </div>
+                        <div style="margin-top: 0.5rem;">
+                            <input type="text" id="m-arm-note" placeholder="Notiz zur Übergabe (Optional)"
+                                style="width: 100%;">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn-danger" id="btn-delete-mission" onclick="openDeleteMissionModal()"
+                        style="display:none;">Löschen</button>
+                    <!-- Cancel Removed -->
+                    <button type="button" class="btn-danger" id="btn-complete-mission" onclick="completeMission()"
+                        style="display:none;">Abschließen</button>
+                    <button type="button" class="btn-success" id="btn-save-mission"
+                        onclick="submitMission(event)">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-mission-modal" class="modal">
+        <div class="modal-content small" style="text-align: center;">
+            <div class="modal-header">
+                <h2>Einsatz Löschen</h2>
+                <button class="close-btn" onclick="closeModal('delete-mission-modal')">&times;</button>
+            </div>
+            <p>Bitte geben Sie einen Grund für das Löschen an:</p>
+            <textarea id="delete-mission-reason" rows="3" style="width: 100%; margin-bottom: 1rem;"
+                placeholder="Begründung..."></textarea>
+            <div class="modal-footer" style="justify-content: center;">
+                <!-- Cancel Removed -->
+                <button class="btn-danger" onclick="confirmDeleteMission()">Endgültig Löschen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Squad Modal -->
+    <div id="squad-modal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h2 id="squad-modal-title">Neuer Trupp</h2>
+                <button class="close-btn" onclick="closeModal('squad-modal')">&times;</button>
+            </div>
+            <form id="s-form" onsubmit="submitSquad(event)">
+                <input type="hidden" id="s-id">
+                <div class="form-group">
+                    <label>Typ</label>
+                    <select id="s-type" onchange="toggleSquadFields()">
+                        <option value="Trupp" selected>Trupp</option>
+                        <option value="Ambulanz">Ambulanz / BHP</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="s-name" required>
+                </div>
+                <div class="form-group">
+                    <label>Qualifikation</label>
+                    <input type="text" id="s-qual" placeholder="San, RS, NFS...">
+                </div>
+                <div class="form-group" id="group-numbers">
+                    <label>Dienstnummern</label>
+                    <input type="text" id="s-numbers" placeholder="z.B. 1234, 5678">
+                </div>
+                <div id="qr-code-container" style="display:none; text-align:center; margin-bottom:1rem;">
+                    <div id="qrcode" style="display:inline-block;"></div>
+                    <p style="margin-top:0.5rem;"><a id="qr-link" href="#" target="_blank"
+                            style="color: var(--primary-color);">Link öffnen</a></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" id="btn-delete-squad" class="btn-danger" onclick="deleteSquad()"
+                        style="display:none;">Löschen</button>
+                    <button type="button" id="btn-show-qr" class="btn-secondary" onclick="showSquadQR()"
+                        style="display:none;">QR-Code anzeigen</button>
+                    <!-- Cancel Removed -->
+                    <button type="submit" class="btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Manual Location Modal -->
+    <div id="location-modal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h2>Standort anpassen</h2>
+                <button class="close-btn" onclick="closeModal('location-modal')">&times;</button>
+            </div>
+            <form onsubmit="submitLocationOverride(event)">
+                <input type="hidden" id="loc-squad-id">
+                <p>Geben Sie einen manuellen Standort ein. Lassen Sie das Feld leer, um den automatisch ermittelten
+                    Standort zu verwenden.</p>
+                <div class="form-group">
+                    <label>Standort</label>
+                    <input type="text" id="loc-manual-input" placeholder="z.B. Raum 1" list="list-location">
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- Squad Removal Status Prompt Modal -->
+    <div id="remove-squad-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Trupp freigeben</h2>
+                <!-- No close button, force decision or cancel -->
+            </div>
+            <div class="modal-body">
+                <p>Folgende Trupps werden aus dem Einsatz entfernt:</p>
+                <ul id="remove-squad-list"></ul>
+                <div class="form-group">
+                    <label>Neuen Status setzen:</label>
+                    <select id="remove-squad-status">
+                        <option value="2">EB (Einsatzbereit)</option>
+                        <option value="Pause">Pause</option>
+                        <option value="NEB">NEB (Nicht Einsatzbereit)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-gray" onclick="closeModal('remove-squad-modal')">Abbrechen (Zurück)</button>
+                <button class="btn-primary" onclick="confirmSquadRemoval()">Übernehmen & Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Viewer Modal -->
+    <div id="log-modal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2>Protokoll</h2>
+                <button class="close-btn" onclick="closeModal('log-modal')">&times;</button>
+            </div>
+            <div class="log-container">
+                <table id="log-table">
+                    <thead>
+                        <tr>
+                            <th>Zeit</th>
+                            <th>Aktion</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Logs here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Config Edit Modal -->
+    <div id="config-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Dienst bearbeiten</h2>
+                <button class="close-btn" onclick="closeModal('config-modal')">&times;</button>
+            </div>
+            <form onsubmit="updateConfig(event)">
+                <div class="form-group">
+                    <label>Name des Dienstes / Einsatzort</label>
+                    <input type="text" id="edit-conf-location">
+                </div>
+                <div class="form-group">
+                    <label>Adresse</label>
+                    <input type="text" id="edit-conf-address">
+                </div>
+                <div class="row">
+                    <div class="form-group half">
+                        <label>Dienstbeginn</label>
+                        <input type="datetime-local" id="edit-conf-start">
+                    </div>
+                    <div class="form-group half">
+                        <label>Dienstende</label>
+                        <input type="datetime-local" id="edit-conf-end">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Einsatzorte importieren (Optional)</label>
+                    <input type="file" id="locations-file" accept=".txt">
+                    <small>Plain-Text-Datei mit einem Ort pro Zeile</small>
+                </div>
+
+                <div class="modal-footer">
+                    <!-- Cancel Removed -->
+                    <button type="submit" class="btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- NEB Confirmation Modal -->
+    <div id="neb-confirm-modal" class="modal">
+        <div class="modal-content small" style="text-align: center;">
+            <div class="modal-header">
+                <h2>Trupp ist im Einsatz</h2>
+                <button class="close-btn" onclick="closeModal('neb-confirm-modal')">&times;</button>
+            </div>
+            <p id="neb-confirm-text">Der Trupp ist aktuell einem Einsatz zugewiesen.</p>
+            <div class="modal-footer"
+                style="justify-content: center; flex-direction: column; gap: 0.5rem; align-items: center;">
+                <button id="btn-neb-remove" class="btn-success" style="width: 100%; padding: 0.4rem; font-size: 0.9rem;"
+                    onclick="resolveNebConflict('remove')">Aus Einsatz entfernen & NEB setzen</button>
+                <button id="btn-neb-keep" class="btn-primary" style="width: 100%; padding: 0.4rem; font-size: 0.9rem;"
+                    onclick="resolveNebConflict('keep')">Im Einsatz behalten & NEB setzen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Complete Mission Modal -->
+    <div id="complete-mission-modal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h2>Einsatz abschließen</h2>
+                <button class="close-btn" onclick="closeModal('complete-mission-modal')">&times;</button>
+            </div>
+            <input type="hidden" id="complete-mission-id">
+            <div class="form-group">
+                <label>Ausgang des Einsatzes <span style="color:red;">*</span></label>
+                <select id="complete-mission-outcome" onchange="toggleArmFields()">
+                    <option value="">-- Bitte wählen --</option>
+                    <option value="Intervention unterblieben">Intervention unterblieben</option>
+                    <option value="Belassen">Belassen (vor Ort belassen)</option>
+                    <option value="ARM">Übergeben (Rettungsdienst / Andere)</option>
+                    <option value="PVW">PVW (Patient verweigert)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>NACA-Score</label>
+                <select id="complete-mission-naca">
+                    <option value="">-- Optional --</option>
+                    <option value="NACA 0 (Keine Erkrankung oder Verletzung)">NACA 0 (Keine Erkrankung oder Verletzung)
+                    </option>
+                    <option value="NACA I (Geringfügige Verletzung bzw. Funktionsstörung)">NACA I (Geringfügige
+                        Verletzung bzw. Funktionsstörung)</option>
+                    <option value="NACA II (Leichte bis mäßig schwere Funktionsstörung)">NACA II (Leichte bis mäßig
+                        schwere Funktionsstörung)</option>
+                    <option value="NACA III (Mäßige bis schwere, aber nicht lebensbedrohliche Störung)">NACA III (Mäßige
+                        bis schwere, aber nicht lebensbedrohliche Störung)</option>
+                    <option
+                        value="NACA IV (Schwere Störung, bei der die kurzfristige Entwicklung einer Lebensbedrohung nicht ausgeschlossen werden kann)">
+                        NACA IV (Schwere Störung, bei der die kurzfristige Entwicklung einer Lebensbedrohung nicht
+                        ausgeschlossen werden kann)</option>
+                    <option value="NACA V (Akute Lebensgefahr)">NACA V (Akute Lebensgefahr)</option>
+                    <option value="NACA VI (Atem- und/oder Kreislaufstillstand)">NACA VI (Atem- und/oder
+                        Kreislaufstillstand)</option>
+                    <option value="NACA VII (Tödliche Verletzung oder Erkrankung)">NACA VII (Tödliche Verletzung oder
+                        Erkrankung)</option>
+                </select>
+            </div>
+
+            <div id="arm-fields"
+                style="display:none; background: #f9f9f9; padding: 1rem; border-radius: 4px; margin-bottom: 1rem; border: 1px solid #eee;">
+                <div style="display: flex; gap: 1rem;">
+                    <div class="form-group" style="flex: 1;">
+                        <input type="text" id="arm-type" placeholder="Typ (z.B. RTW)">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <input type="text" id="arm-id" placeholder="Kennung (z.B. 12/83-1)">
+                    </div>
+                </div>
+                <div style="margin-top: 0.5rem;">
+                    <input type="text" id="arm-note" placeholder="Notiz zur Übergabe (Optional)" style="width: 100%;">
+                </div>
+            </div>
+
+            <div class="modal-footer" style="justify-content: flex-end;">
+                <!-- Cancel Removed -->
+                <button class="btn-success" onclick="submitCompletion()">Abschließen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Destination Selection Modal -->
+    <div id="destination-modal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h2>Zielort wählen</h2>
+                <button class="close-btn" onclick="closeModal('destination-modal')">&times;</button>
+            </div>
+            <p>Wohin wird der Patient gebracht?</p>
+            <div id="destination-options" class="destination-grid">
+                <!-- Ambulanz buttons injected here -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn-gray" onclick="closeModal('destination-modal')">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Event Input Modal -->
+    <div id="custom-event-modal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h2>Neues Ereignis festhalten</h2>
+                <button class="close-btn" onclick="closeModal('custom-event-modal')">&times;</button>
+            </div>
+            <form onsubmit="submitCustomEvent(event)">
+                <div class="form-group">
+                    <label>Ereignis / Notiz</label>
+                    <textarea id="custom-event-input" rows="3"
+                        placeholder="z.B. Besuch von Einsatzleiter, Materialausgabe..." required
+                        style="width: 100%;"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Export Selection Modal -->
+    <div id="export-modal" class="modal">
+        <div class="modal-content small" style="text-align: center;">
+            <div class="modal-header">
+                <h2>Format wählen</h2>
+                <button class="close-btn" onclick="closeModal('export-modal')">&times;</button>
+            </div>
+            <p style="margin-bottom: 1.5rem;">Bitte wählen Sie das gewünschte Format für den Export:</p>
+            <div class="modal-footer" style="justify-content: center; gap: 1rem;">
+                <button class="btn-primary"
+                    onclick="window.location.href='/api/export'; closeModal('export-modal')">Text
+                    (.txt)</button>
+                <button class="btn-primary"
+                    onclick="window.location.href='/api/export/pdf'; closeModal('export-modal')">PDF (.pdf)</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="guide-overlay" class="guide-overlay"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=FIXED_SESSION_V5"></script>
+    <script>
+        // Inline Weather Script for maximum reliability
+
+        // Global Coords
+        window.weatherLat = 52.52;
+        window.weatherLon = 13.41;
+
+        async function fetchWeather() {
+            const widget = document.getElementById('weather-widget');
+
+            // Unhide
+            if (widget) widget.classList.remove('hidden');
+
+            let lat = window.weatherLat;
+            let lon = window.weatherLon;
+
+            // Geolocation
+            if (navigator.geolocation) {
+                try {
+                    const position = await new Promise((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+                    });
+                    lat = position.coords.latitude;
+                    lon = position.coords.longitude;
+
+                    // Update global
+                    window.weatherLat = lat;
+                    window.weatherLon = lon;
+                } catch (e) {
+                    console.log("Geo error:", e);
+                }
+            }
+
+            // Fetch
+            try {
+                // Add timestamp to prevent caching
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto&_=${new Date().getTime()}`;
+
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("HTTP " + response.status);
+
+                const data = await response.json();
+
+                if (data.current_weather) {
+                    const temp = Math.round(data.current_weather.temperature);
+                    const code = data.current_weather.weathercode;
+                    const isDay = data.current_weather.is_day; // 1=Day, 0=Night
+
+                    let icon = '❓';
+                    const getIcon = (d, n) => isDay === 1 ? d : n;
+
+                    if (code === 0) icon = getIcon('☀️', '🌙');
+                    else if (code === 1) icon = getIcon('🌤️', '🌙');
+                    else if (code === 2) icon = getIcon('⛅', '🌙'); // Partly cloudy (Moon)
+                    else if (code === 3) icon = '☁️';
+                    else if (code === 45 || code === 48) icon = '🌫️';
+                    else if (code >= 51 && code <= 67) icon = '🌧️';
+                    else if (code >= 71 && code <= 77) icon = '🌨️';
+                    else if (code >= 80 && code <= 82) icon = '🌦️';
+                    else if (code >= 85 && code <= 86) icon = '❄️';
+                    else if (code >= 95) icon = '⛈️';
+
+                    const iconEl = document.getElementById('weather-icon');
+                    const tempEl = document.getElementById('weather-temp');
+
+                    if (iconEl) iconEl.textContent = icon;
+                    if (tempEl) tempEl.textContent = temp + "°C";
+
+                    console.log(`Weather: ${icon} ${temp}C`);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchWeather();
+
+            // Meteoblue Link
+            const widget = document.getElementById('weather-widget');
+            if (widget) {
+                widget.onclick = () => {
+                    const url = `https://www.meteoblue.com/en/weather/week/index?lat=${window.weatherLat}&lon=${window.weatherLon}`;
+                    window.open(url, '_blank');
+                };
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,2644 @@
+* {
+    box-sizing: border-box;
+}
+
+.hidden {
+    display: none !important;
+}
+
+:root {
+    --primary: #d32f2f;
+    --primary-dark: #b71c1c;
+    --header-bg: #d32f2f;
+    /* New variable for header customization */
+    --bg: #f5f5f5;
+    --surface: #ffffff;
+    --text: #212121;
+    --text-secondary: #757575;
+    --border: #e0e0e0;
+
+    /* Status Colors */
+    --c-2: #4caf50;
+    /* Green */
+    --c-3: #ff9800;
+    /* Orange */
+    --c-4: #2196f3;
+    /* Red */
+    --c-7: #e60de2;
+    /* Blue */
+    --c-8: #9c27b0;
+    /* Purple */
+    --c-P: #9e9e9e;
+    /* Grey */
+    --c-Pos: #0288d1;
+    /* Light Blue */
+    --c-NEB: #ff5722;
+    /* Deep Orange */
+    --c-Dip: #ffeb3b;
+    /* Yellow */
+}
+
+body.dark-mode {
+    --bg: #121212;
+    --surface: #222222;
+    --text: #f4f2f2;
+    --text-secondary: #a0a0a0;
+    --border: #555;
+    /* Lighter border for better visibility */
+
+    /* Slightly desaturated/brighter status colors for dark mode if needed, 
+       but keeping standard for now unless contrast is poor.
+       Maybe adjust primary slightly for dark mode aesthetics */
+    --primary: #ef5350;
+    /* Lighter red for dark background */
+    --primary-dark: #c62828;
+}
+
+body {
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Welcome Screen */
+.welcome-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    display: none;
+    flex-direction: row;
+    z-index: 1000;
+}
+
+.welcome-screen.active {
+    display: flex;
+}
+
+.welcome-left {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    /* Move to left */
+    background: transparent;
+    padding: 3rem;
+    padding-left: 15vw;
+    /* Approx third line positioning */
+    z-index: 2;
+}
+
+.welcome-content {
+    max-width: 90%;
+    width: fit-content;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    color: white;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.welcome-content h1 {
+    font-size: 8rem;
+    margin: 0 0 0.5rem 0;
+    font-family: Impact, sans-serif;
+    font-weight: 700;
+    line-height: 1;
+
+    /* Add shadow for readability over image */
+}
+
+.welcome-subtitle {
+    font-size: 1.5rem;
+    margin: 0 0 1.5rem 0;
+}
+
+.welcome-copywrite {
+    font-size: 1rem;
+    margin: 0 0 0.5rem 0;
+}
+
+.welcome-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 3rem;
+    align-self: flex-start;
+    justify-content: flex-start;
+}
+
+.btn-welcome-primary,
+.btn-welcome-secondary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 0.5rem;
+    /* Reduced side padding as fixed width handles size */
+    width: 220px;
+    /* Fixed width for equal size */
+    justify-content: center;
+    /* Center text */
+    font-size: 1.15rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 99999px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-welcome-primary {
+    background: rgba(255, 255, 255, 0);
+    color: rgb(255, 255, 255);
+    border: 2px solid white;
+}
+
+.btn-welcome-primary:hover {
+    background: rgb(255, 255, 255);
+    color: black;
+    border: 2px solid white;
+    mix-blend-mode: screen;
+}
+
+.btn-welcome-secondary {
+    background: rgba(255, 255, 255, 0);
+    color: rgb(255, 255, 255);
+    border: 2px solid white;
+}
+
+.btn-welcome-secondary:hover {
+    background: rgb(255, 255, 255);
+    color: black;
+    border: 2px solid white;
+    mix-blend-mode: screen;
+}
+
+
+
+.btn-icon {
+    font-size: 1.5rem;
+}
+
+.welcome-right {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    overflow: hidden;
+}
+
+.welcome-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+}
+
+/* Overlay (kept for modal compatibility) */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.overlay-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    width: 500px;
+    max-width: 90%;
+}
+
+/* Header */
+header {
+    background: var(--header-bg);
+    color: white;
+    padding: 0.5rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    min-height: 60px;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.header-left h1 {
+    margin: 0;
+    font-size: 1.4rem;
+}
+
+.header-left .subtitle {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.header-center {
+    text-align: center;
+}
+
+.clock {
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.date {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+.header-actions button {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: white;
+    margin-left: 0.5rem;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    border-radius: 99999px;
+    font-size: 0.9rem;
+    /* Explicit standardized size */
+    line-height: normal;
+}
+
+.header-actions .btn-danger {
+    padding: 0.5rem 1rem;
+    border-radius: 99999px;
+    font-size: 0.9rem;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.2);
+    /* Identical to other buttons */
+    color: white;
+}
+
+.header-actions .btn-danger:hover {
+    background: rgba(255, 255, 255, 0.3);
+    /* Identical hover */
+}
+
+.header-actions button:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Main Layout */
+main {
+    flex: 1;
+    display: flex;
+    padding: 1rem;
+    gap: 1rem;
+    overflow: hidden;
+}
+
+/* Squad Panel */
+.squad-panel {
+    width: 400px;
+    background: var(--surface);
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.panel-header {
+    padding: 0.75rem;
+    background: #eee;
+    font-weight: bold;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.small-btn {
+    padding: 0 0.5rem;
+    font-size: 1.2rem;
+    cursor: pointer;
+}
+
+#desktop-view-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.squad-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0.5rem;
+}
+
+.squad-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem;
+}
+
+.squad-info h3 {
+    margin: 0 0 0.2rem 0;
+    font-size: 1rem;
+}
+
+.qual-badge {
+    font-size: 0.7em;
+    background: #e0e0e0;
+    padding: 2px 4px;
+    border-radius: 2px;
+    vertical-align: middle;
+}
+
+.squad-status-text {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 1.2em;
+    /* Ensure height even if empty */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-right: -3.5rem;
+
+
+    /* Badge Style */
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.clickable-location {
+    cursor: pointer;
+    border-bottom: 1px dotted transparent;
+    /* Subtle hint or completely invisible? User said "optisch nix ändern". */
+    /* Let's keep it invisible but with pointer */
+}
+
+.clickable-location:hover {
+    opacity: 0.8;
+}
+
+.clickable-badge {
+    cursor: pointer;
+}
+
+.clickable-badge:hover {
+    filter: brightness(0.95);
+    /* Slight dim to indicate interaction */
+}
+
+.initial-loc {
+    font-weight: normal;
+    font-size: 0.85em;
+    opacity: 0.8;
+    margin-left: 0.3em;
+}
+
+/* Status Backgrounds */
+.squad-status-text.status-2 {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+}
+
+/* EB - Green */
+.squad-status-text.status-3 {
+    background-color: #fff3e0;
+    color: #ef6c00;
+}
+
+/* zBO - Orange */
+.squad-status-text.status-4 {
+    background-color: #e3f2fd;
+    color: #1565c0;
+}
+
+/* BO - Blue */
+.squad-status-text.status-7 {
+    background-color: #f3e5f5;
+    color: #7b1fa2;
+}
+
+/* zAO - Purple */
+.squad-status-text.status-8 {
+    background-color: #f3e5f5;
+    color: #4a148c;
+}
+
+/* AO - Deep Purple */
+.squad-status-text.status-Pause {
+    background-color: #fafafa;
+    color: #757575;
+    border: 1px solid #eee;
+}
+
+/* Pause - Grey */
+.squad-status-text.status-NEB {
+    background-color: #fbe9e7;
+    color: #d84315;
+}
+
+/* NEB - Deep Orange */
+.squad-status-text.status-Integriert {
+    background-color: #fffde7;
+    color: #fbc02d;
+}
+
+/* Disp - Yellow */
+
+
+.squad-timer {
+    font-family: monospace;
+    font-size: 0.75rem;
+    /* Reduced size (approx 50% visually) */
+    font-weight: bold;
+    color: var(--text-secondary);
+    align-self: start;
+    min-width: 60px;
+    /* Reduced width */
+    text-align: right;
+    /* Align right */
+    padding-right: 1rem;
+    /* Move timer slightly away from the edge */
+    margin-top: 0;
+    /* Ensure no extra top spacing */
+}
+
+.squad-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    /* Prevent wrapping */
+    gap: 4px;
+    overflow-x: auto;
+    /* Allow scroll if too tight */
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.status-btn {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    border: 1px solid var(--border);
+    background: #f9f9f9;
+    cursor: pointer;
+    border-radius: 99999px;
+    min-width: 24px;
+    text-align: center;
+}
+
+.status-btn:hover {
+    filter: brightness(0.95);
+}
+
+/* Status Classes */
+.s2.active {
+    background: var(--c-2);
+    color: white;
+    border-color: var(--c-2);
+}
+
+.s3.active {
+    background: var(--c-3);
+    color: white;
+    border-color: var(--c-3);
+}
+
+.s4.active {
+    background: var(--c-4);
+    color: white;
+    border-color: var(--c-4);
+}
+
+.s7.active {
+    background: var(--c-7);
+    color: white;
+    border-color: var(--c-7);
+}
+
+.s8.active {
+    background: var(--c-8);
+    color: white;
+    border-color: var(--c-8);
+}
+
+.sP.active {
+    background: var(--c-P);
+    color: white;
+    border-color: var(--c-P);
+}
+
+.sPos.active {
+    background: var(--c-Pos);
+    color: white;
+    border-color: var(--c-Pos);
+}
+
+.sNEB.active {
+    background: var(--c-NEB);
+    color: white;
+    border-color: var(--c-NEB);
+}
+
+/* sDip is always yellow when present (Action button) */
+.status-btn.sDip {
+    background: var(--c-Dip);
+    color: black;
+    /* Contrast */
+    border-color: var(--c-Dip);
+}
+
+.status-btn.sDip:hover {
+    filter: brightness(0.9);
+}
+
+.mini-status.sDip {
+    background: var(--c-Dip);
+    color: black;
+}
+
+
+/* Mission Panel */
+.mission-panel {
+    flex: 1;
+    background: var(--surface);
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+
+
+.mission-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem;
+}
+
+/* Dark Mode Overrides for Components */
+body.dark-mode .squad-card,
+body.dark-mode .modal-content {
+    background-color: var(--surface);
+    color: var(--text);
+    border-color: var(--border);
+}
+
+body.dark-mode .mission-card {
+    background-color: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
+    /* Keep the red indicator */
+}
+
+body.dark-mode input,
+body.dark-mode select,
+body.dark-mode textarea {
+    background-color: #2c2c2c;
+    color: var(--text);
+    border-color: var(--border);
+}
+
+body.dark-mode .btn-secondary,
+body.dark-mode .btn-counter,
+body.dark-mode .status-btn {
+    background-color: #333;
+    color: var(--text);
+    border-color: #444;
+}
+
+/* Dark Mode Override for Gray Button */
+
+body.dark-mode .btn-gray {
+    background: #f9f9f9;
+    /* Border matches background to be invisible but reserve space */
+    border: 2px solid #f9f9f9;
+    color: #413a3a;
+    padding: 0.4rem 0.8rem;
+    border-radius: 99999px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: bold;
+    line-height: normal;
+    transition: all 0.2s;
+}
+
+body.dark-mode .btn-gray:hover {
+    background: #413a3a;
+    /* Border matches text color */
+    border: 2px solid #f9f9f9;
+    color: #f9f9f9;
+    padding: 0.4rem 0.8rem;
+    border-radius: 99999px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: bold;
+    line-height: normal;
+    transition: all 0.2s;
+}
+
+/* Tutorial Specific Dark Mode Fixes */
+body.dark-mode .feature-item {
+    background: #f9f9f9;
+    color: #212121;
+    /* Force back to dark text */
+}
+
+body.dark-mode .tutorial-tip {
+    background: #fff3e0;
+    color: #e65100;
+    /* Force back to original orange text */
+    border-left-color: #ff9800;
+}
+
+/* Restore active status colors in Dark Mode */
+body.dark-mode .status-btn.s2.active {
+    background-color: var(--c-2);
+    border-color: var(--c-2);
+    color: white;
+}
+
+body.dark-mode .status-btn.s3.active {
+    background-color: var(--c-3);
+    border-color: var(--c-3);
+    color: white;
+}
+
+body.dark-mode .status-btn.s4.active {
+    background-color: var(--c-4);
+    border-color: var(--c-4);
+    color: white;
+}
+
+body.dark-mode .status-btn.s7.active {
+    background-color: var(--c-7);
+    border-color: var(--c-7);
+    color: white;
+}
+
+body.dark-mode .status-btn.s8.active {
+    background-color: var(--c-8);
+    border-color: var(--c-8);
+    color: white;
+}
+
+body.dark-mode .status-btn.sP.active {
+    background-color: var(--c-P);
+    border-color: var(--c-P);
+    color: white;
+}
+
+body.dark-mode .status-btn.sPos.active {
+    background-color: var(--c-Pos);
+    border-color: var(--c-Pos);
+    color: white;
+}
+
+body.dark-mode .status-btn.sNEB.active {
+    background-color: var(--c-NEB);
+    border-color: var(--c-NEB);
+    color: white;
+}
+
+body.dark-mode .status-btn.sDip {
+    background-color: var(--c-Dip);
+    border-color: var(--c-Dip);
+    color: black;
+}
+
+body.dark-mode .mission-desc {
+    background-color: #4a3b32;
+    /* Darker orange/brown */
+    color: #ffd8b1;
+}
+
+body.dark-mode .mission-status-badge.Laufend {
+    background-color: #1a237e;
+    color: #90caf9;
+}
+
+body.dark-mode .mission-status-badge.Abgeschlossen {
+    background-color: #424242;
+    color: #bdbdbd;
+}
+
+body.dark-mode .panel-header {
+    background-color: #434343;
+    border-bottom-color: var(--border);
+}
+
+body.dark-mode .mission-card.done {
+    background-color: #1e1e1e;
+    /* Keep dark */
+    opacity: 0.6;
+}
+
+body.dark-mode .qual-badge {
+    background-color: #424242;
+    /* Darker grey */
+    color: #e0e0e0;
+    /* Light text */
+}
+
+body.dark-mode .squad-tag {
+    background-color: #333;
+    /* Dark background for tags in mission */
+    color: #fff;
+    border: 1px solid #555;
+    padding: 2px 5px;
+    /* Ensure padding matches standard if not already set */
+    border-radius: 4px;
+}
+
+/* Squad names in mission selection (new mission modal) */
+body.dark-mode .squad-select-btn {
+    background-color: #333;
+    color: #fff;
+    border-color: #555;
+}
+
+body.dark-mode .squad-select-btn:hover {
+    background-color: #424242;
+}
+
+body.dark-mode .squad-select-btn.selected {
+    background-color: #0d47a1;
+    /* Active dark blue */
+    border-color: #90caf9;
+}
+
+/* Ensure standard components use variables where possible */
+.mission-card {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
+    border-radius: 4px;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    background: var(--surface);
+    /* Use variable default */
+}
+
+.mission-card.done {
+    border-left-color: var(--text-secondary);
+    opacity: 0.8;
+    background: #fafafa;
+}
+
+/* Blinking Red Border for missions without squads */
+/* Blinking Red Border / Lamp Effect for missions without squads */
+@keyframes blink-alarm {
+    0% {
+        border-color: var(--primary);
+        box-shadow: 0 0 5px var(--primary);
+    }
+
+    50% {
+        border-color: rgba(211, 47, 47, 0.3);
+        /* Dimmer red */
+        box-shadow: none;
+    }
+
+    100% {
+        border-color: var(--primary);
+        box-shadow: 0 0 5px var(--primary);
+    }
+}
+
+.mission-card.no-squads {
+    border: 2px solid var(--primary);
+    /* Full border base */
+    border-left-width: 8px;
+    /* Maintain thick left anchor */
+    animation: blink-alarm 2.5s infinite ease-in-out;
+    /* Slower uniform pulse */
+}
+
+.mission-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.mission-id {
+    font-weight: bold;
+    color: var(--primary);
+}
+
+.mission-time {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-right: auto;
+}
+
+.mission-status-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+}
+
+.mission-status-badge.Laufend {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.mission-status-badge.Abgeschlossen {
+    background: #eee;
+    color: #616161;
+}
+
+.edit-btn {
+    background: none;
+    border: none;
+    font-size: 1.1rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.edit-btn:hover {
+    color: var(--text);
+}
+
+.mission-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem 1rem;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.full-width {
+    grid-column: span 2;
+}
+
+.mission-desc {
+    font-style: italic;
+    background: #fff3e0;
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    white-space: pre-wrap;
+    outline: none;
+    /* No border when editing */
+}
+
+.mission-notes {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: #666;
+    border-top: 1px dashed #ddd;
+    padding-top: 0.25rem;
+    display: flex;
+    gap: 0.3rem;
+    cursor: text;
+    /* Show cursor on whole row */
+}
+
+/* Hover effect on the container to indicate interactivity */
+.mission-notes:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+    /* subtle highlight */
+}
+
+
+
+/* When the span inside is empty or not, make it fill space */
+.editable-note {
+    outline: none;
+    cursor: text;
+    flex: 1;
+    /* Take remaining space */
+    min-width: 10px;
+}
+
+
+
+.editable-note:empty:before {
+    content: " ";
+    /* Ensure clickable space if empty */
+    white-space: pre;
+}
+
+/* Ticker */
+#ticker-bar {
+    background: #333;
+    color: white;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    justify-content: space-between;
+}
+
+.ticker-copyright {
+    opacity: 0.7;
+    font-size: 0.8rem;
+}
+
+.welcome-copyright {
+    margin-top: 4rem;
+    font-size: 0.8rem;
+    opacity: 0.6;
+    text-align: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+    padding-top: 1rem;
+    width: 100%;
+}
+
+/* Modals */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+
+/* Number Control */
+.number-control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.number-control input {
+    width: 60px;
+    text-align: center;
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.btn-counter {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--border);
+    background: #f0f0f0;
+    border-radius: 99999px;
+    font-size: 1.5rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    user-select: none;
+}
+
+.btn-counter:hover {
+    background: #e0e0e0;
+}
+
+.btn-counter:active {
+    background: #d0d0d0;
+}
+
+.modal.open {
+    display: flex;
+}
+
+.modal-content {
+    background: var(--surface);
+    color: var(--text);
+    padding: 2rem;
+    border-radius: 4px;
+    width: 600px;
+    max-width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-content.large {
+    width: 800px;
+}
+
+.modal-content.small {
+    width: 400px;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    line-height: 1;
+    cursor: pointer;
+    color: #666;
+    padding: 0 0.5rem;
+    display: flex;
+    align-items: center;
+    transition: color 0.2s;
+
+}
+
+.close-btn:hover {
+    color: #000;
+    background: none;
+}
+
+/* Forms */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.row {
+    display: flex;
+    gap: 1rem;
+}
+
+.half {
+    flex: 1;
+}
+
+label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+input,
+select,
+textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    box-sizing: border-box;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 99999px;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.btn-secondary {
+    background: #e0e0e0;
+    color: black;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 99999px;
+    cursor: pointer;
+    margin-right: 0.5rem;
+}
+
+/* Checkbox Group */
+.checkbox-group {
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    padding: 0.5rem;
+    background: #fafafa;
+}
+
+.checkbox-group div {
+    margin-bottom: 0.25rem;
+}
+
+.checkbox-group input {
+    width: auto;
+    margin-right: 0.5rem;
+}
+
+/* Log Table */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+th,
+td {
+    text-align: left;
+    padding: 0.5rem;
+    border-bottom: 1px solid #ddd;
+}
+
+th {
+    background-color: #f5f5f5;
+}
+
+.log-container {
+    overflow-y: auto;
+    flex: 1;
+    max-height: 60vh;
+}
+
+/* Helpers */
+.icon-btn.tiny {
+    font-size: 0.8rem;
+    padding: 2px 5px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.icon-btn.tiny:hover {
+    color: var(--primary);
+}
+
+.btn-danger {
+    background: #d32f2f;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 99999px;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.btn-danger:hover {
+    background: #b71c1c;
+}
+
+.btn-success {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 99999px;
+    cursor: pointer;
+    font-size: 1rem;
+    /* Match btn-primary */
+    /* margin-left redundant if flex gap used, but keeping for safety/legacy? 
+       Actually, flex parent handles spacing usually. Resetting margins is safer. */
+    margin: 0;
+}
+
+.btn-success:hover {
+    background: #45a049;
+}
+
+/* Mission Squad Tags */
+.squad-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: #e0e0e0;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: bold;
+}
+
+.mini-status {
+    font-size: 0.75rem;
+    padding: 2px 4px;
+    border-radius: 3px;
+    color: white;
+    font-weight: bold;
+    background: #666;
+    /* Default */
+}
+
+/* Explicit Status Colors for Mini Badges */
+.mini-status.s2 {
+    background: var(--c-2);
+}
+
+.mini-status.s3 {
+    background: var(--c-3);
+}
+
+.mini-status.s4 {
+    background: var(--c-4);
+}
+
+.mini-status.s7 {
+    background: var(--c-7);
+}
+
+.mini-status.s8 {
+    background: var(--c-8);
+}
+
+.mini-status.sP {
+    background: var(--c-P);
+}
+
+.mini-status.sNEB {
+    background: var(--c-NEB);
+}
+
+.mini-status.s1 {
+    background: #9e9e9e;
+}
+
+/* Modal Footer Layout */
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    gap: 0.5rem;
+}
+
+/* Push Delete button to the left */
+.modal-footer .btn-danger {
+    margin-right: auto;
+}
+
+.modal-footer button {
+    min-width: 100px;
+    /* Uniform minimum width for symmetry */
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+/* Mobile View Styles */
+#desktop-view-container.hidden {
+    display: none !important;
+}
+
+#mobile-view-container.hidden {
+    display: none !important;
+}
+
+#mobile-view-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.mobile-header {
+    background: var(--header-bg);
+    color: white;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.mobile-header h1 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.mobile-squad-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+/* Updated Mobile Item for Logic Split */
+.mobile-squad-item {
+    display: flex;
+    align-items: stretch;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    min-height: 80px;
+    /* Touch friendly height */
+}
+
+/* Left: Name Area (Go to Mission View) */
+.mobile-squad-name {
+    flex: 2;
+    /* Takes more space */
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    font-size: 1.1rem;
+    font-weight: bold;
+    border-right: 1px solid var(--border);
+    cursor: pointer;
+    background: var(--surface);
+}
+
+.mobile-squad-name:active {
+    background: #f0f0f0;
+}
+
+/* Right: Status Area (Open Status Modal) */
+.mobile-squad-status {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    color: white;
+    /* Default for most */
+    transition: background-color 0.2s;
+}
+
+.mobile-squad-status:active {
+    filter: brightness(0.9);
+}
+
+/* Specific Status Backgrounds for Mobile List to ensure visibility */
+.mobile-squad-status.s2 {
+    background-color: var(--c-2);
+}
+
+.mobile-squad-status.s3 {
+    background-color: var(--c-3);
+}
+
+.mobile-squad-status.s4 {
+    background-color: var(--c-4);
+}
+
+.mobile-squad-status.s7 {
+    background-color: var(--c-7);
+}
+
+.mobile-squad-status.s8 {
+    background-color: var(--c-8);
+}
+
+.mobile-squad-status.sP {
+    background-color: var(--c-P);
+}
+
+.mobile-squad-status.sNEB {
+    background-color: var(--c-NEB);
+}
+
+.mobile-squad-status.sDip {
+    background-color: var(--c-Dip);
+    color: black;
+}
+
+.mobile-squad-status.s1 {
+    background-color: #9e9e9e;
+    /* Grey default for Frei */
+    color: white;
+}
+
+/* Mobile Overlays (Missions & Status) */
+.mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+}
+
+.mobile-overlay.hidden {
+    display: none;
+}
+
+.mobile-overlay-header {
+    padding: 1rem;
+    background: var(--header-bg);
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.mobile-overlay-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    flex: 1;
+    text-align: center;
+    margin-right: 2rem;
+    /* Balance back button */
+}
+
+.back-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+/* Mobile Mission List */
+.mobile-mission-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.mobile-mission-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.mobile-mission-card h3 {
+    margin: 0 0 0.5rem 0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.mobile-mission-row {
+    margin-bottom: 0.3rem;
+    line-height: 1.4;
+}
+
+.mobile-empty-msg {
+    text-align: center;
+    color: var(--text-secondary);
+    margin-top: 2rem;
+}
+
+/* Status Selection Grid */
+.mobile-status-grid {
+    flex: 1;
+    padding: 1rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    /* 2 columns */
+    gap: 1rem;
+    overflow-y: auto;
+}
+
+.status-btn-large {
+    border: none;
+    border-radius: 8px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: white;
+    padding: 1rem;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.status-btn-large:active {
+    transform: scale(0.98);
+}
+
+.status-btn-large.s1 {
+    background-color: #ffe082;
+    color: #5d4037;
+}
+
+/* Frei - custom */
+
+/* Status Classes reuse existing logic where possible, but mapped here for large buttons if needed */
+/* We can rely on global .s2, .s3 etc but need background-color ensuring */
+
+.status-btn-large.s2 {
+    background-color: var(--c-2);
+}
+
+.status-btn-large.s3 {
+    background-color: var(--c-3);
+}
+
+.status-btn-large.s4 {
+    background-color: var(--c-4);
+}
+
+.status-btn-large.s7 {
+    background-color: var(--c-7);
+}
+
+.status-btn-large.s8 {
+    background-color: var(--c-8);
+}
+
+.status-btn-large.sP {
+    background-color: var(--c-P);
+}
+
+.status-btn-large.sNEB {
+    background-color: var(--c-NEB);
+}
+
+/* Force Mobile styles if screen is small (handled by JS toggling containers, but here for safety) */
+@media (max-width: 768px) {
+    /* Additional tweaks if managed by CSS media queries */
+}
+
+/* Tutorial Modal Styles */
+.modal-content.large {
+    max-width: 800px;
+    width: 90%;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #eee;
+}
+
+.modal-header h2 {
+    margin: 0;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    line-height: 1;
+    padding: 0;
+    width: 2rem;
+    height: 2rem;
+    padding-left: 3em !important;
+}
+
+.close-btn:hover {
+    color: var(--primary);
+}
+
+.tutorial-content {
+    line-height: 1.6;
+}
+
+.tutorial-content h3 {
+    color: var(--primary);
+    margin-top: 0;
+}
+
+.tutorial-content h4 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.tutorial-content ul {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.tutorial-content li {
+    margin: 0.5rem 0;
+}
+
+/* Squad Selection Buttons */
+.squad-select-item {
+    display: inline-block;
+}
+
+.squad-select-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.5rem;
+    background: white;
+    border: 2px solid #ccc;
+    border-radius: 99999px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.85rem;
+    box-sizing: border-box;
+}
+
+.squad-select-btn:hover {
+    border-color: #4CAF50;
+}
+
+.squad-select-btn.selected {
+    background: white;
+    border-color: #4CAF50;
+}
+
+.squad-name {
+    font-weight: 700;
+}
+
+/* Guide / Tour Styles */
+.guide-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 9998;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.guide-overlay.active {
+    display: block;
+    opacity: 1;
+}
+
+.guide-highlight {
+    position: relative;
+    z-index: 9999 !important;
+    background-color: white !important;
+    box-shadow: 0 0 0 5px var(--primary), 0 0 200px rgba(0, 0, 0, 0.8) !important;
+    pointer-events: auto !important;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+/* Specific fix for buttons that have no background usually */
+button.guide-highlight {
+    background-color: #fff !important;
+    color: #333 !important;
+}
+
+.guide-tooltip {
+    position: fixed;
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    z-index: 10000;
+    width: 320px;
+    max-width: 90vw;
+    display: none;
+    flex-direction: column;
+    gap: 1rem;
+    animation: fadeIn 0.3s ease;
+    border-left: 5px solid var(--primary);
+}
+
+.guide-tooltip h3 {
+    margin: 0;
+    color: var(--primary);
+    font-size: 1.3rem;
+}
+
+.guide-tooltip p {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+    color: #444;
+}
+
+.guide-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.guide-btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 99999px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+
+.guide-btn-skip {
+    background: #f5f5f5;
+    color: #666;
+}
+
+.guide-btn-skip:hover {
+    background: #e0e0e0;
+}
+
+.guide-btn-next {
+    background: var(--primary);
+    color: white;
+}
+
+.guide-btn-next:hover {
+    background: var(--primary-dark);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* --- Mobile Welcome Screen Optimizations --- */
+@media (max-width: 768px) {
+    .welcome-screen {
+        flex-direction: column;
+        background-image: url('/static/mobile-bg.jpg');
+        /* New Mobile Background */
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+    }
+
+    /* Add overlay to ensure text readability */
+    .welcome-left {
+        width: 100%;
+        height: 100vh;
+        /* Full viewport height */
+        padding: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        background-color: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(4px);
+    }
+
+    .welcome-right {
+        display: none;
+        /* Hide image on mobile to save space */
+    }
+
+    .welcome-content h1 {
+        font-size: 2.5rem;
+        /* Readable large title */
+        margin-bottom: 1rem;
+    }
+
+    .welcome-subtitle {
+        font-size: 1.2rem;
+        margin-bottom: 2rem;
+    }
+
+    .welcome-actions {
+        flex-direction: column;
+        /* Stack buttons */
+        width: 100%;
+        gap: 1rem;
+    }
+
+    .btn-welcome-primary,
+    .btn-welcome-secondary {
+        width: 100%;
+        /* Full width buttons */
+        padding: 1rem;
+        font-size: 1.2rem;
+        /* Larger touch targets */
+        margin: 0;
+    }
+}
+
+
+/* --- Mobile View Styles --- */
+#mobile-view-container {
+    width: 100%;
+    height: 100vh;
+    background: #f0f2f5;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#mobile-view-container.hidden {
+    display: none !important;
+}
+
+#desktop-view-container.hidden {
+    display: none !important;
+}
+
+.mobile-header {
+    background: var(--primary);
+    color: white;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    flex-shrink: 0;
+}
+
+.mobile-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.mobile-squad-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    /* Stack vertically for easy tapping */
+    gap: 1rem;
+}
+
+.mobile-squad-btn {
+    appearance: none;
+    border: none;
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #333;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mobile-squad-btn:active {
+    transform: scale(0.98);
+}
+
+.mobile-squad-btn .status-indicator {
+    font-size: 1rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    background: #eee;
+    color: #555;
+    font-weight: normal;
+}
+
+/* Specific status colors */
+.mobile-squad-btn .status-indicator.s2 {
+    background: var(--c-2);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.s3 {
+    background: var(--c-3);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.s4 {
+    background: var(--c-4);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.s7 {
+    background: var(--c-7);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.s8 {
+    background: var(--c-8);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.sP {
+    background: var(--c-P);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.sNEB {
+    background: var(--c-NEB);
+    color: white;
+}
+
+.mobile-squad-btn .status-indicator.sDip {
+    background: var(--c-Dip);
+    color: black;
+}
+
+/* Mobile Overlay */
+.mobile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: white;
+    z-index: 3000;
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.3s ease;
+}
+
+.mobile-overlay.hidden {
+    display: none;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(100%);
+    }
+
+    to {
+        transform: translateY(0);
+    }
+}
+
+.mobile-overlay-header {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.mobile-overlay-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    flex: 1;
+}
+
+.back-btn {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    color: var(--primary);
+    font-weight: bold;
+    padding: 0.5rem;
+    cursor: pointer;
+}
+
+.mobile-mission-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.mobile-mission-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.mobile-mission-card h3 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    color: var(--primary);
+    display: flex;
+    justify-content: space-between;
+}
+
+.mobile-mission-row {
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+}
+
+.mobile-mission-row strong {
+    display: block;
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 0.1rem;
+}
+
+.mobile-empty-msg {
+    text-align: center;
+    color: #666;
+    margin-top: 2rem;
+    font-style: italic;
+}
+
+.tutorial-body {
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+}
+
+.tutorial-slide {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.tutorial-slide.active {
+    display: block;
+}
+
+.tutorial-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
+}
+
+.step-dots {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e0e0e0;
+    transition: background 0.3s;
+}
+
+.dot.active {
+    background: var(--primary);
+}
+
+.tutorial-feature-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.feature-item {
+    background: #f9f9f9;
+    padding: 1rem;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.feature-icon {
+    font-size: 2rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.tutorial-tip {
+    background: #fff3e0;
+    border-left: 4px solid #ff9800;
+    padding: 1rem;
+    margin-top: 1rem;
+    border-radius: 0 4px 4px 0;
+}
+
+/* Dynamic Squad Inputs */
+.squad-inputs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.squad-input-item input {
+    font-size: 0.85rem;
+    padding: 0.3rem;
+}
+
+/* Warning Blink Animation */
+@keyframes blink-red {
+    0% {
+        color: inherit;
+    }
+
+    50% {
+        color: red;
+        font-weight: bold;
+    }
+
+    100% {
+        color: inherit;
+    }
+}
+
+.blink-warning {
+    animation: blink-red 1s infinite;
+    margin-left: 0.5rem;
+}
+
+/* Warning Dot Animation */
+@keyframes blink-dot {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7);
+    }
+
+    50% {
+        opacity: 0.8;
+        transform: scale(1.1);
+        box-shadow: 0 0 0 4px rgba(255, 0, 0, 0);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0);
+    }
+}
+
+.status-warning-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    background-color: #d32f2f;
+    border-radius: 50%;
+    margin-left: 10px;
+    vertical-align: middle;
+    animation: blink-dot 1.5s infinite;
+}
+
+/* Stylish Header Buttons */
+.header-icon-btn {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    /* Circle */
+    padding: 4px;
+    /* Padding for SVG */
+    margin-left: 0.3rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.header-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+    /* Subtle pop */
+    border-color: rgba(255, 255, 255, 0.6);
+}
+
+.header-icon-btn svg {
+    width: 100%;
+    height: 100%;
+    stroke: white;
+}
+
+/* Header Layout Fix */
+/* Header Layout Fix */
+.header-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+.header-center {
+    display: block;
+    text-align: center;
+}
+
+.header-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Weather Widget */
+.header-center {
+    display: flex !important;
+    /* Override block */
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+}
+
+.time-container {
+    text-align: center;
+}
+
+.weather-widget {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.1rem;
+    opacity: 0.9;
+}
+
+.weather-widget.hidden {
+    display: none;
+}
+
+.weather-icon {
+    font-size: 1.5rem;
+}
+
+.weather-temp {
+    font-weight: bold;
+}
+
+/* Force Panel Headers to match */
+.panel-header {
+    height: 50px;
+    /* Explicit height */
+    font-size: 1.1rem;
+    /* Explicit font size */
+    line-height: 1.2;
+}
+
+.panel-header span {
+    display: flex;
+    align-items: center;
+}
+
+#mission-stats {
+    font-size: 0.9rem;
+    margin-left: 1rem;
+    font-weight: normal;
+    opacity: 0.8;
+}
+
+/* Gray Button (Glassy) */
+.btn-gray {
+    background: rgb(65 58 58);
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    color: #f9f9f9;
+    padding: 0.4rem 0.8rem;
+    border-radius: 99999px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: bold;
+    line-height: normal;
+    transition: all 0.2s;
+}
+
+.btn-gray:hover {
+    background: #f9f9f9;
+    /* heller Hintergrund */
+    border: 1px solid rgb(65, 58, 58);
+    /* dunkler Rahmen */
+    color: rgb(65, 58, 58);
+    /* dunkler Text */
+    padding: 0.4rem 0.8rem;
+    border-radius: 99999px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: bold;
+    line-height: normal;
+    transition: all 0.2s;
+}
+
+/* Uniform Button Sizes in Modals */
+.modal-content button {
+    min-width: 120px;
+    justify-content: center;
+}
+
+/* Adjust for small modals to prevent overflow */
+.modal-content.small button {
+    min-width: 80px;
+    padding: 0.5rem 0.5rem;
+}
+
+/* Drag and Drop Styles */
+.squad-card.dragging {
+    opacity: 0.4;
+    border: 2px dashed #999;
+}
+
+.squad-card.over {
+    border-top: 2px solid var(--primary);
+}
+
+/* Weather Widget Interactivity */
+.weather-widget {
+    cursor: pointer;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+    border-radius: 8px;
+    padding: 0 5px;
+}
+
+.weather-widget:hover {
+    transform: scale(1.05);
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Inline Mission Notes */
+.inline-mission-note {
+    width: 100%;
+    min-height: 2.5em;
+    /* Enough for 1-2 lines */
+    background-color: transparent;
+    border: 1px dashed transparent;
+    border-radius: 4px;
+    padding: 0.3rem;
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: inherit;
+    resize: vertical;
+    transition: border-color 0.2s, background-color 0.2s;
+    margin-top: 0.5rem;
+}
+
+.inline-mission-note:hover {
+    border-color: #ccc;
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.inline-mission-note:focus {
+    border-color: var(--primary);
+    background-color: var(--surface);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(211, 47, 47, 0.1);
+}
+
+body.dark-mode .inline-mission-note:hover {
+    border-color: #555;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+body.dark-mode .inline-mission-note:focus {
+    border-color: var(--primary);
+    background-color: #1e1e1e;
+}
+
+/* Destination Modal Styles */
+.destination-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+/* Silent Alarm Overlay */
+@keyframes pulse-red {
+    0% {
+        background-color: rgba(255, 0, 0, 0.9);
+    }
+
+    50% {
+        background-color: rgba(200, 0, 0, 0.9);
+    }
+
+    100% {
+        background-color: rgba(255, 0, 0, 0.9);
+    }
+}
+
+@keyframes blink-text {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+.alert-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: #ff0000;
+    z-index: 9999;
+    display: none;
+    /* Hidden by default */
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    animation: pulse-red 1s infinite;
+    padding: 2rem;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.alert-title {
+    color: white;
+    font-size: 3rem;
+    font-weight: 900;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    animation: blink-text 0.5s infinite;
+}
+
+.alert-reason {
+    color: white;
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 3rem;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1rem;
+    border-radius: 12px;
+}
+
+.alert-btn {
+    background-color: white;
+    color: red;
+    font-size: 1.5rem;
+    font-weight: bold;
+    padding: 1.5rem 3rem;
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    text-transform: uppercase;
+    transition: transform 0.2s;
+}
+
+.alert-btn:active {
+    transform: scale(0.95);
+}
+
+
+.destination-btn {
+    padding: 1rem;
+    font-size: 1.1rem;
+    font-weight: bold;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.destination-btn:hover {
+    background: var(--bg);
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.destination-btn.active-patients {
+    border-left: 4px solid var(--primary);
+}
+
+.destination-btn small {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: normal;
+    color: var(--text-secondary);
+}
+
+/* Mobile Admin View Styles */
+#mobile-admin-view {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: var(--bg);
+}
+
+.mobile-tabs {
+    display: flex;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+
+.mobile-tab {
+    flex: 1;
+    padding: 1rem;
+    text-align: center;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-weight: bold;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.mobile-tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+
+.mobile-tab-content {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    position: relative;
+    /* For FAB positioning */
+}
+
+.mobile-tab-content.active {
+    display: block;
+}
+
+/* FAB */
+.fab-btn {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    font-size: 2rem;
+    border: none;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fab-btn:hover {
+    background: var(--primary-dark);
+}
+
+/* Mobile Admin List Items */
+.mobile-admin-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    /* More rounded */
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.mobile-admin-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.mobile-admin-item h3 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.mobile-admin-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    justify-content: flex-end;
+}
+
+/* Logout Button in Header */
+.btn-logout {
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-logout:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+}

@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trupp Status</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #1a1a1a;
+            --card-bg: #2d2d2d;
+            --text-light: #f0f0f0;
+            --primary-color: #e30613;
+            /* Johanniter Red */
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #333;
+        }
+
+        .squad-name {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 0;
+            color: white;
+        }
+
+        .squad-qual {
+            font-size: 1rem;
+            color: #888;
+            margin-top: 0.2rem;
+        }
+
+        /* Mission Box - Prominent */
+        .mission-box {
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            border: 1px solid #444;
+        }
+
+        .mission-box.active {
+            border-left: 5px solid var(--primary-color);
+            background: linear-gradient(to right, rgba(227, 6, 19, 0.1), var(--card-bg) 30%);
+        }
+
+        .mission-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #aaa;
+            margin-bottom: 0.5rem;
+        }
+
+        .mission-reason {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 0.5rem;
+            line-height: 1.2;
+        }
+
+        .mission-loc {
+            font-size: 1.2rem;
+            color: #ccc;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        .mission-details-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.8rem;
+            font-size: 0.95rem;
+            color: #bbb;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1rem;
+            border-radius: 8px;
+        }
+
+        .detail-item strong {
+            color: #888;
+            font-weight: 600;
+            display: block;
+            font-size: 0.8rem;
+            margin-bottom: 0.2rem;
+        }
+
+        /* Status Grid - Compact */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            /* 3 columns */
+            gap: 0.8rem;
+            margin-top: auto;
+            /* Push to bottom */
+            margin-bottom: 2rem;
+        }
+
+        .status-btn {
+            border: 2px solid #444;
+            background-color: transparent;
+            border-radius: 8px;
+            padding: 0.8rem 0.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #888;
+            /* Inactive color */
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .status-btn small {
+            font-size: 0.7rem;
+            font-weight: 400;
+            margin-top: 0.2rem;
+            color: #666;
+        }
+
+        /* Active State Colors */
+        .status-btn.active-status {
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-btn.active-status small {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        /* Specific Colors ONLY when active */
+        .status-btn.s2.active-status {
+            background-color: var(--c-2);
+            border-color: var(--c-2);
+        }
+
+        .status-btn.s3.active-status {
+            background-color: var(--c-3);
+            border-color: var(--c-3);
+        }
+
+        .status-btn.s4.active-status {
+            background-color: var(--c-4);
+            border-color: var(--c-4);
+        }
+
+        .status-btn.s7.active-status {
+            background-color: var(--c-7);
+            border-color: var(--c-7);
+        }
+
+        .status-btn.s8.active-status {
+            background-color: var(--c-8);
+            border-color: var(--c-8);
+        }
+
+        .status-btn.sNEB.active-status {
+            background-color: #555;
+            border-color: #555;
+            color: #aaa;
+        }
+
+        /* Connection Status */
+        .connection-status {
+            position: fixed;
+            bottom: 5px;
+            right: 10px;
+            font-size: 0.7rem;
+            color: #444;
+        }
+
+        .alert-overlay {
+            display: none;
+            /* Toggled freely */
+            position: fixed;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(255, 0, 0, 0.9);
+            z-index: 9999;
+            /* Max INT */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            animation: pulse-bg 1s infinite alternate;
+        }
+
+        @keyframes pulse-bg {
+            from {
+                background-color: rgba(255, 0, 0, 0.9);
+            }
+
+            to {
+                background-color: rgba(200, 0, 0, 0.9);
+            }
+        }
+
+        .alert-title {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+
+        .alert-reason {
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .alert-btn {
+            font-size: 1.5rem;
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 8px;
+            background: white;
+            color: red;
+            font-weight: bold;
+        }
+
+        #refresh-btn {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 1.2rem;
+            cursor: pointer;
+            z-index: 100;
+        }
+
+        #logout-btn {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="logout-btn" onclick="window.location.href='/'">← Abmelden</button>
+    <button id="refresh-btn" onclick="window.location.reload()">↻</button>
+
+    <div class="header">
+        <h1 class="squad-name">{{ squad.name }}</h1>
+        <div class="squad-qual">{{ squad.qualification or '' }}</div>
+        {% if squad.type == 'Ambulanz' %}
+        <div id="ambulanz-info" style="margin-top:0.5rem; font-size:1.1rem; color:#bbb;">
+            Patienten: <span id="pat-count" style="color:white; font-weight:bold;">{{ squad.patient_count }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Active Mission Display -->
+    <div id="mission-container">
+        <!-- Initial Placeholer -->
+        <div class="mission-box">
+            <div class="mission-label">Status</div>
+            <div style="text-align:center; font-size:1.2rem; color:#888; padding: 2rem;">Lade Daten...</div>
+        </div>
+    </div>
+
+    <div class="status-grid">
+        {% if squad.type == 'Ambulanz' %}
+        <!-- Ambulanz Buttons: 2, NEB, 4 (Besetzt) -->
+        <button class="status-btn s2" onclick="setStatus('2')">EB<small>Einsatzbereit</small></button>
+        <button class="status-btn sNEB" onclick="setStatus('NEB')">NEB<small>Nicht Einsatzbereit</small></button>
+        <button class="status-btn s4" onclick="setStatus('4')">Besetzt<small>Ambulanz voll</small></button>
+        {% else %}
+        <!-- Trupp Buttons -->
+        <button class="status-btn s2" onclick="setStatus('2')">EB<small>Einsatzbereit</small></button>
+        <button class="status-btn s3" onclick="setStatus('3')">zBO<small>Zum Berufungsort</small></button>
+        <button class="status-btn s4" onclick="setStatus('4')">BO<small>Am Berufungsort</small></button>
+        <button class="status-btn s7" onclick="setStatus('7')">zAO<small>Zum Abgabeort</small></button>
+        <button class="status-btn s8" onclick="setStatus('8')">AO<small>Am Abgabeort</small></button>
+        {% endif %}
+    </div>
+
+    <div class="connection-status" id="conn-stat">Verbunden</div>
+
+    <!-- Silent Alarm Overlay (Moved Out) -->
+    <div id="alert-overlay" class="alert-overlay">
+        <div class="alert-title">NEUER EINSATZ!</div>
+        <div id="alert-reason" class="alert-reason">-</div>
+        <button class="alert-btn" onclick="ackAlert()">BESTÄTIGEN</button>
+    </div>
+
+    <!-- Destination Modal -->
+    <div id="dest-modal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:1000; flex-direction:column; padding:1rem; box-sizing:border-box; overflow-y:auto;">
+        <h2 style="text-align:center; color:white; margin-bottom: 1.5rem;">Ziel / Ambulanz wählen</h2>
+        <div id="dest-list" style="display:flex; flex-direction:column; gap:1rem;">
+            <!-- Buttons injected here -->
+        </div>
+        <div style="margin-top:2rem; display:flex; flex-direction:column; gap:1rem;">
+            <input type="text" id="custom-dest-input" placeholder="Sonstiges / Ort..."
+                style="padding:1rem; font-size:1.1rem; border-radius:8px; border:none;">
+            <button onclick="submitCustomDest()" class="status-btn"
+                style="background:#555; color:white; border:none;">Bestätigen</button>
+            <button onclick="closeDestModal()" class="status-btn" style="margin-top:2rem; padding:1rem; width:100%; background:transparent; color:#888; border:1px solid #444;
+            border-radius:8px;">Abbrechen</button>
+        </div>
+
+    </div> <!-- Close dest-modal -->
+
+    <script>
+        const squadId = Number("{{ squad.id }}");
+        console.log("Mobile View Init for Squad:", squadId);
+        const token = "{{ token }}";
+        const squadType = "{{ squad.type }}";
+        let currentStatus = "{{ squad.current_status }}";
+        let allSquads = []; // Store fetched squads
+        let allMissions = []; // Store fetched missions
+
+        let pendingMissionId = null;
+
+        // Initial Highlight
+        highlightStatus(currentStatus);
+
+        // Initial Fetch to get Mission Data
+        fetchData();
+
+        // Polling
+        setInterval(fetchData, 3000);
+
+        function highlightStatus(stat) {
+            document.querySelectorAll('.status-btn').forEach(btn => {
+                btn.classList.remove('active-status');
+            });
+            // Handle NEB class separately or generic
+            let selector = `.status-btn.s${stat}`;
+            if (stat === 'NEB') selector = `.status-btn.sNEB`;
+
+            const activeBtn = document.querySelector(selector);
+            if (activeBtn) activeBtn.classList.add('active-status');
+        }
+
+        async function setStatus(newStatus) {
+            // INTERCEPT zAO (7) for TRUPP
+            if (newStatus === '7' && squadType !== 'Ambulanz') {
+                openDestModal();
+                return;
+            }
+
+            await performStatusUpdate(newStatus);
+        }
+
+        async function performStatusUpdate(newStatus) {
+            try {
+                // Optimistic UI
+                highlightStatus(newStatus);
+
+                const res = await fetch(`/api/squads/${squadId}/status?token=${token}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+
+                if (!res.ok) throw new Error("Update failed");
+                const data = await res.json();
+                currentStatus = data.current_status;
+                highlightStatus(currentStatus);
+                fetchData(); // Trigger immediate update
+            } catch (e) {
+                console.error(e);
+                alert("Verbindungsfehler!");
+                highlightStatus(currentStatus); // Revert
+                document.getElementById('conn-stat').textContent = "Fehler!";
+                document.getElementById('conn-stat').style.color = "red";
+            }
+        }
+
+        async function fetchData() {
+            try {
+                // Fetch updates for the session (Cache Busted)
+                const res = await fetch(`/api/updates?token=${token}&_t=${Date.now()}`, {
+                    cache: 'no-store',
+                    headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+
+                // Update Globals
+                allSquads = data.squads;
+                allMissions = data.missions;
+
+                // Find our squad
+                const mySquad = data.squads.find(s => s.id === squadId);
+
+                if (mySquad) {
+                    if (mySquad.current_status !== currentStatus) {
+                        currentStatus = mySquad.current_status;
+                        highlightStatus(currentStatus);
+                    }
+
+                    if (squadType === 'Ambulanz') {
+                        const patCountEl = document.getElementById('pat-count');
+                        if (patCountEl && mySquad.patient_count !== undefined) {
+                            patCountEl.textContent = mySquad.patient_count;
+                        }
+                    }
+
+                    // Update Mission Box & Check for Alert
+                    checkMissionAlert(data.missions, mySquad);
+                }
+
+                document.getElementById('conn-stat').textContent = "Verbunden";
+                document.getElementById('conn-stat').style.color = "#444";
+
+            } catch (e) {
+                console.error(e);
+                document.getElementById('conn-stat').textContent = "Err: " + e.message;
+                document.getElementById('conn-stat').style.color = "red";
+            }
+        }
+
+        function checkMissionAlert(missions, squad) {
+            renderMissionBox(missions, squad);
+
+            // Logic: Find active mission
+            const activeMission = missions.find(m =>
+                m.squad_ids.includes(squad.id) &&
+                m.status !== 'Abgeschlossen' &&
+                m.status !== 'Storniert' &&
+                m.status !== 'Intervention unterblieben'
+            );
+
+            if (activeMission) {
+                const ackId = sessionStorage.getItem('ackMissionId');
+
+                // Alert if new mission (not acked)
+                if (activeMission.id.toString() !== ackId) {
+                    triggerAlert(activeMission);
+                }
+            }
+        }
+
+        function triggerAlert(mission) {
+            try {
+                const overlay = document.getElementById('alert-overlay');
+                const reason = document.getElementById('alert-reason');
+
+                if (!overlay || !reason) {
+                    throw new Error("Overlay elements missing");
+                }
+
+                // Set content
+                reason.textContent = mission.reason + " (" + mission.location + ")";
+                pendingMissionId = mission.id;
+
+                // Show Overlay (Flex)
+                overlay.style.setProperty('display', 'flex', 'important');
+            } catch (e) {
+                console.error("Alert Trigger Error:", e);
+            }
+        }
+
+        function ackAlert() {
+            if (pendingMissionId) {
+                sessionStorage.setItem('ackMissionId', pendingMissionId.toString());
+            }
+            document.getElementById('alert-overlay').style.display = 'none';
+        }
+
+        function renderMissionBox(missions, squad) {
+            const container = document.getElementById('mission-container');
+
+            // Find active mission for THIS squad
+            // The squad object from /api/updates might not have full emission details, 
+            // but `allMissions` contains all full missions.
+
+            const activeMission = missions.find(m =>
+                m.squad_ids.includes(squad.id) &&
+                m.status !== 'Abgeschlossen' &&
+                m.status !== 'Storniert' &&
+                m.status !== 'Intervention unterblieben'
+            );
+
+            if (activeMission) {
+                const m = activeMission;
+                const mNum = m.mission_number || m.id;
+                const alarm = m.alarming_entity || '-';
+                const desc = m.description || '-';
+                const note = m.notes || '';
+
+                container.innerHTML = `
+                    <div class="mission-box active">
+                        <div class="mission-label">Aktiver Einsatz #${mNum}</div>
+                        <div class="mission-reason">${m.reason}</div>
+                        <div class="mission-loc">
+                             <span style="font-size:1.5em">📍</span> 
+                             <span>${m.location}</span>
+                        </div>
+                        
+                        <div class="mission-details-grid">
+                            <div class="detail-item">
+                                <strong>Alarmierung</strong>
+                                <div>${alarm}</div>
+                            </div>
+                            <div class="detail-item">
+                                <strong>Lage / Info</strong>
+                                <div>${desc}</div>
+                            </div>
+                            ${note ? `
+                            <div class="detail-item">
+                                <strong>Notizen</strong>
+                                <div>${note}</div>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                 `;
+            } else {
+                container.innerHTML = `
+                    <div class="mission-box">
+                        <div class="mission-label">Status</div>
+                        <div style="text-align:center; padding: 1.5rem;">
+                            <div style="font-size: 1.5rem; color: #666; font-weight: bold;">Kein aktiver Einsatz</div>
+                            <div style="font-size: 0.9rem; color: #444; margin-top:0.5rem;">Warte auf Zuteilung...</div>
+                        </div>
+                    </div>
+                 `;
+            }
+        }
+
+        // --- DESTINATION MODAL LOGIC ---
+        function openDestModal() {
+            const modal = document.getElementById('dest-modal');
+            const list = document.getElementById('dest-list');
+            list.innerHTML = '';
+
+            // Filter Ambulanzen
+            const ambulatories = allSquads.filter(s => s.type === 'Ambulanz');
+
+            if (ambulatories.length === 0) {
+                list.innerHTML = '<div style="color:#aaa; text-align:center;">Keine Ambulanzen verfügbar</div>';
+            }
+
+            ambulatories.forEach(amb => {
+                // Status Color Indicator
+                let colorClass = 's' + amb.current_status;
+                if (amb.current_status === 'NEB') colorClass = 'sNEB';
+
+                // Patient Count
+                const pCount = amb.patient_count || 0;
+
+                const btn = document.createElement('button');
+                btn.className = `status-btn ${colorClass}`; // Re-use styling
+                btn.style.width = '100%';
+                btn.style.flexDirection = 'row';
+                btn.style.justifyContent = 'space-between';
+                btn.style.padding = '1.2rem';
+                btn.style.textAlign = 'left';
+                btn.innerHTML = `
+                    <span style="font-weight:bold; font-size:1.1rem;">${amb.name}</span>
+                    <span style="font-size:0.9rem; opacity:0.8;">${pCount} Pat.</span>
+                `;
+                btn.onclick = () => selectAmbulanz(amb);
+                list.appendChild(btn);
+            });
+
+            modal.style.display = 'flex';
+        }
+
+        function closeDestModal() {
+            document.getElementById('dest-modal').style.display = 'none';
+        }
+
+        async function selectAmbulanz(amb) {
+            closeDestModal();
+
+            // 1. Set Status zAO
+            await performStatusUpdate('7');
+
+            // 2. Assign Ambulanz to Mission
+            const mySquad = allSquads.find(s => s.id === squadId);
+            if (mySquad) {
+                // Find active mission
+                const activeM = allMissions.find(m =>
+                    m.squad_ids.includes(mySquad.id) &&
+                    m.status !== 'Abgeschlossen'
+                );
+
+                if (activeM && !activeM.squad_ids.includes(amb.id)) {
+                    const newIds = [...activeM.squad_ids, amb.id];
+                    try {
+                        await fetch(`/api/missions/${activeM.id}?token=${token}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ squad_ids: newIds })
+                        });
+                    } catch (e) {
+                        console.error("Assignment failed", e);
+                        alert("Konnte Ambulanz nicht zuweisen!");
+                    }
+                }
+            }
+        }
+
+        async function submitCustomDest() {
+            const val = document.getElementById('custom-dest-input').value;
+            closeDestModal();
+
+            // Just update status 7 (and maybe set custom location via API if we had that endpoint/logic exposed in performStatusUpdate, but backend logic clears custom loc on mission updates? No, update_squad_status persists it for zAO/AO).
+            // Actually, we should probably set the custom location on the squad if user entered text.
+
+            if (val) {
+                // Call Location Update Endpoint (created earlier but maybe not used in mobile yet)
+                // /api/squads/<id>/location
+                try {
+                    await fetch(`/api/squads/${squadId}/location?token=${token}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ location: val })
+                    });
+                } catch (e) {
+                    console.error("Location update failed", e);
+                }
+            }
+
+            await performStatusUpdate('7');
+        }
+
+    </script>
+</body>
+
+</html>
