@@ -793,6 +793,33 @@
         </div>
     </div>
 
+    <!-- Mission Protocol Modal -->
+    <div id="mission-protocol-modal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h2>Einsatzprotokoll</h2>
+                <button class="close-btn" onclick="closeModal('mission-protocol-modal')">&times;</button>
+            </div>
+            <div class="log-container">
+                <table id="mission-protocol-table">
+                    <thead>
+                        <tr>
+                            <th>Zeit</th>
+                            <th>Trupp / Ursprung</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Logs here -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-gray" onclick="closeModal('mission-protocol-modal')">Schließen</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Export Selection Modal -->
     <div id="export-modal" class="modal">
         <div class="modal-content small" style="text-align: center;">

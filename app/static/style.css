@@ -2642,3 +2642,35 @@ body.dark-mode .inline-mission-note:focus {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 50%;
 }
+
+/* Logs & Protocol Tables */
+.log-container {
+    max-height: 60vh;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+table th, table td {
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+table th {
+    background-color: var(--bg-secondary);
+    position: sticky;
+    top: 0;
+    font-weight: 600;
+}
+
+table tr:hover {
+    background-color: rgba(255,255,255,0.05);
+}

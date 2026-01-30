@@ -275,11 +275,121 @@
             align-items: center;
             gap: 0.3rem;
         }
+
+        #history-btn {
+            position: fixed;
+            top: 10px;
+            right: 50px;
+            /* Left of refresh */
+            background: none;
+            border: none;
+            color: #ccc;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            border: 1px solid #444;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        /* History Modal */
+        .full-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-dark);
+            z-index: 2000;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .full-modal-header {
+            padding: 1rem;
+            background: #222;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .full-modal-header h2 {
+            margin: 0;
+            font-size: 1.2rem;
+            color: white;
+        }
+
+        .full-modal-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .history-item {
+            background: var(--card-bg);
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            cursor: pointer;
+        }
+
+        .history-item-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+
+        .history-time {
+            color: #888;
+            font-size: 0.8rem;
+        }
+
+        .history-reason {
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: white;
+            margin-bottom: 0.2rem;
+        }
+
+        .history-loc {
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            color: #ddd;
+            margin-top: 1rem;
+        }
+
+        .log-table th {
+            text-align: left;
+            border-bottom: 1px solid #555;
+            padding: 0.5rem;
+            color: #888;
+        }
+
+        .log-table td {
+            border-bottom: 1px solid #333;
+            padding: 0.5rem;
+            vertical-align: top;
+        }
     </style>
 </head>
 
 <body>
     <button id="logout-btn" onclick="window.location.href='/'">← Abmelden</button>
+    <button id="logout-btn" onclick="window.location.href='/'">← Abmelden</button>
+    <button id="history-btn" onclick="openHistory()">📜 Verlauf</button>
     <button id="refresh-btn" onclick="window.location.reload()">↻</button>
 
     <div class="header">
@@ -343,6 +453,31 @@
         </div>
 
     </div> <!-- Close dest-modal -->
+
+    <!-- History List Modal -->
+    <div id="history-modal" class="full-modal">
+        <div class="full-modal-header">
+            <h2>Einsatz-Verlauf</h2>
+            <button onclick="closeHistory()" class="status-btn"
+                style="padding:0.5rem; width:auto; border:none; color:white;">✕</button>
+        </div>
+        <div id="history-list" class="full-modal-content">
+            <!-- Items injected here -->
+        </div>
+    </div>
+
+    <!-- History Detail Modal -->
+    <div id="history-detail-modal" class="full-modal" style="z-index: 2100;">
+        <div class="full-modal-header">
+            <button onclick="closeHistoryDetail()" class="status-btn"
+                style="padding:0.5rem; width:auto; border:none; color:white;">← Zurück</button>
+            <h2 id="hd-title">Details</h2>
+            <div style="width:30px;"></div> <!-- spacer -->
+        </div>
+        <div id="history-detail-content" class="full-modal-content">
+            <!-- Details injected here -->
+        </div>
+    </div>
 
     <script>
         const squadId = Number("{{ squad.id }}");
@@ -564,6 +699,15 @@
             }
         }
 
+        // --- PREVENT BACK TO ADMIN ---
+        // Push a state so that the back button triggers popstate instead of leaving page immediately
+        history.pushState(null, document.title, location.href);
+
+        window.addEventListener('popstate', function (event) {
+            // Redirect to Home on Back Press
+            window.location.replace("/");
+        });
+
         // --- DESTINATION MODAL LOGIC ---
         function openDestModal() {
             const modal = document.getElementById('dest-modal');
@@ -661,6 +805,131 @@
 
             await performStatusUpdate('7');
         }
+
+        // --- HISTORY LOGIC ---
+        function openHistory() {
+            const modal = document.getElementById('history-modal');
+            const list = document.getElementById('history-list');
+            list.innerHTML = '';
+
+            // Filter completed missions for this squad
+            const myHistory = allMissions.filter(m =>
+                m.squad_ids.includes(squadId) &&
+                m.status === 'Abgeschlossen'
+            ).sort((a, b) => {
+                // Sort by updated_at desc (most recent first)
+                const tA = new Date(a.updated_at || a.created_at).getTime();
+                const tB = new Date(b.updated_at || b.created_at).getTime();
+                return tB - tA;
+            });
+
+            if (myHistory.length === 0) {
+                list.innerHTML = '<div style="text-align:center; padding:2rem; color:#666;">Keine vergangenen Einsätze.</div>';
+            } else {
+                myHistory.forEach(m => {
+                    const item = document.createElement('div');
+                    item.className = 'history-item';
+
+                    const date = new Date(m.created_at);
+                    const timeStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                    item.innerHTML = `
+                        <div class="history-item-header">
+                            <span class="history-time">${timeStr}</span>
+                            <span style="color: #666;">#${m.mission_number || m.id}</span>
+                        </div>
+                        <div class="history-reason">${m.reason}</div>
+                        <div class="history-loc">${m.location}</div>
+                    `;
+                    item.onclick = () => openHistoryDetail(m);
+                    list.appendChild(item);
+                });
+            }
+
+            modal.style.display = 'flex';
+        }
+
+        function closeHistory() {
+            document.getElementById('history-modal').style.display = 'none';
+        }
+
+        async function openHistoryDetail(mission) {
+            const modal = document.getElementById('history-detail-modal');
+            const content = document.getElementById('history-detail-content');
+
+            // Basic Info
+            let html = `
+                <div class="mission-box" style="margin-bottom:1rem;">
+                    <div class="mission-label">Abgeschlossen</div>
+                    <div class="mission-reason">${mission.reason}</div>
+                    <div class="mission-loc">${mission.location}</div>
+                    <div class="mission-details-grid">
+                        <div class="detail-item"><strong>Alarmierung</strong> ${mission.alarming_entity || '-'}</div>
+                        <div class="detail-item"><strong>Info</strong> ${mission.description || '-'}</div>
+                        <div class="detail-item"><strong>Ausgang</strong> <span style="color:#4CAF50;">${mission.outcome || '-'}</span></div>
+                        ${mission.arm_notes ? `<div class="detail-item"><strong>Übergabe-Notiz</strong> ${mission.arm_notes}</div>` : ''}
+                    </div>
+                </div>
+                
+                <h3 style="color:white; margin-bottom:0.5rem;">Protokoll (Zeiten)</h3>
+                <div style="background:var(--card-bg); padding:0.5rem; border-radius:8px; border:1px solid #444;">
+                    <table class="log-table">
+                        <thead>
+                            <tr>
+                                <th>Zeit</th>
+                                <th>Ereignis</th>
+                            </tr>
+                        </thead>
+                        <tbody id="hd-log-body">
+                            <tr><td colspan="2">Lade Protokoll...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            content.innerHTML = html;
+            modal.style.display = 'flex';
+
+            // Fetch Logs
+            try {
+                const res = await fetch(`/api/missions/${mission.id}/logs`);
+                const logs = await res.json();
+
+                const tbody = document.getElementById('hd-log-body');
+                tbody.innerHTML = '';
+
+                if (logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="2">Keine Einträge.</td></tr>';
+                } else {
+                    logs.forEach(l => {
+                        const d = new Date(l.timestamp);
+                        const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                        let details = l.details;
+                        // Optional: Highlight squad's own actions?
+
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${t}</td>
+                            <td>
+                                ${l.squad_name ? `<span style="color:#aaa; font-size:0.8em;">${l.squad_name}</span><br>` : ''}
+                                ${details}
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+
+            } catch (e) {
+                console.error(e);
+                document.getElementById('hd-log-body').innerHTML = '<tr><td colspan="2" style="color:red;">Fehler beim Laden.</td></tr>';
+            }
+        }
+
+        function closeHistoryDetail() {
+            document.getElementById('history-detail-modal').style.display = 'none';
+        }
+
 
     </script>
 </body>

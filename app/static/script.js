@@ -18,6 +18,12 @@ window.fetch = async function (url, options = {}) {
             options.headers['X-Session-ID'] = sid;
         }
     }
+
+    // Ensure cookies are sent for session affinity
+    if (!options.credentials) {
+        options.credentials = 'same-origin';
+    }
+
     return originalFetch(url, options);
 };
 
@@ -88,7 +94,47 @@ async function loadData() {
         }
 
         squadsData = data.squads;
-        missionsData = data.missions;
+
+        // Preserve active edits in missionsData
+        if (document.activeElement && document.activeElement.hasAttribute('data-mission-id')) {
+            const activeId = parseInt(document.activeElement.dataset.missionId);
+            const activeField = document.activeElement.dataset.field; // "location", "notes", etc
+
+            if (activeId && activeField) {
+                const incomingMission = data.missions.find(m => m.id === activeId);
+                if (incomingMission) {
+                    // Overwrite incoming data with current DOM value to prevent reversion
+                    console.log(`Preserving active edit for Mission ${activeId} Field ${activeField}`);
+                    incomingMission[activeField] = document.activeElement.innerText;
+                }
+            }
+        }
+
+        // Merge Strategy: Respect recent local edits (Grace Period 5s)
+        const now = Date.now();
+        const grace = 5000;
+        const localMap = new Map(missionsData.map(m => [m.id, m]));
+
+        missionsData = data.missions.map(serverM => {
+            const localM = localMap.get(serverM.id);
+            if (localM) {
+                if (localM._lastEdit_notes && (now - localM._lastEdit_notes < grace)) {
+                    // console.log("Preserving local notes for", serverM.id);
+                    serverM.notes = localM.notes;
+                    serverM._lastEdit_notes = localM._lastEdit_notes;
+                }
+                if (localM._lastEdit_description && (now - localM._lastEdit_description < grace)) {
+                    serverM.description = localM.description;
+                    serverM._lastEdit_description = localM._lastEdit_description;
+                }
+                if (localM._lastEdit_location && (now - localM._lastEdit_location < grace)) {
+                    serverM.location = localM.location;
+                    serverM._lastEdit_location = localM._lastEdit_location;
+                }
+            }
+            return serverM;
+        });
+
         optionsData = data.options;
 
 
@@ -1156,10 +1202,33 @@ async function deleteSquad() {
 
 
 
+async function saveMissionNote(id, newNote) {
+    // Update local data
+    const m = missionsData.find(m => m.id === id);
+    if (m) {
+        m.notes = newNote;
+        m._lastEdit_notes = Date.now(); // Track local edit time
+    }
+
+    try {
+        await fetch(`/api/missions/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes: newNote })
+        });
+        console.log(`Note saved for mission ${id}`);
+    } catch (error) {
+        console.error("Error saving note:", error);
+    }
+}
+
 async function saveMissionDescription(id, newDesc) {
     // Update local data first
     const m = missionsData.find(m => m.id === id);
-    if (m) m.description = newDesc;
+    if (m) {
+        m.description = newDesc;
+        m._lastEdit_description = Date.now();
+    }
 
     try {
         await fetch(`/api/missions/${id}`, {
@@ -1183,6 +1252,7 @@ async function saveMissionLocation(id, newLoc) {
             m.initial_location = m.location; // Save old as initial
         }
         m.location = newLoc;
+        m._lastEdit_location = Date.now();
         renderMissions(); // Re-render to show "Initial: ..." if needed
     }
 
@@ -1200,6 +1270,17 @@ async function saveMissionLocation(id, newLoc) {
 
 function renderMissions() {
     const container = document.getElementById('mission-list');
+
+    // Prevent re-rendering if user is typing in an editable field within the mission list
+    if (container.contains(document.activeElement)) {
+        // Double check it's an editable element
+        if (document.activeElement.isContentEditable ||
+            document.activeElement.tagName === 'INPUT' ||
+            document.activeElement.tagName === 'TEXTAREA') {
+            console.log("User is typing, skipping mission render.");
+            return;
+        }
+    }
 
     // Check if details was open BEFORE clearing
     const existingDetails = container.querySelector('.completed-missions-details');
@@ -1258,7 +1339,17 @@ function renderMissions() {
         const noSquadsClass = (!isDone && (!mission.squad_ids || mission.squad_ids.length === 0)) ? 'no-squads' : '';
 
         const card = document.createElement('div');
+        // ADDED onclick="editMission..." to main container
         card.className = `mission-card ${doneClass} ${noSquadsClass}`;
+        card.onclick = (e) => {
+            // Redundant check if stopPropagation works well, but good for safety
+            editMission(mission.id);
+        };
+        // Actually it's cleaner to set it via innerHTML string injection or direct property, 
+        // but since we build innerHTML below, let's just make the container clickable via attribute if possible 
+        // OR just set the property here. Direct property is better for "this" context if needed, but simple function call is fine.
+        card.setAttribute('onclick', `editMission(${mission.id})`);
+
 
         if (!isDone) {
             card.addEventListener('dragover', allowDrop);
@@ -1325,14 +1416,20 @@ function renderMissions() {
                 <span class="mission-id">#${mission.mission_number || mission.id}</span>
                 <span class="mission-time">${date}</span>
                 <span class="mission-status-badge ${mission.status}" 
-                      ${mission.status === 'Laufend' ? `style="cursor: pointer;" onclick='openCompleteMissionModal(${mission.id})' title="Einsatz abschließen"` : ''}>
+                      ${mission.status === 'Laufend' ? `style="cursor: pointer;" onclick='event.stopPropagation(); openCompleteMissionModal(${mission.id})' title="Einsatz abschließen"` : ''}>
                     ${mission.status}
                 </span>
-                <button class="edit-btn" onclick='editMission(${mission.id})'>✎</button>
+                <div style="display:flex; gap:0.25rem;" onclick="event.stopPropagation()">
+                     <button class="icon-btn tiny" onclick='openMissionProtocol(${mission.id})' title="Einsatzprotokoll anzeigen">📜</button>
+                </div>
             </div>
             <div class="mission-details">
                 <div>
-                    <strong>Ort:</strong> <span class="editable-note" contenteditable="true" onblur="saveMissionLocation(${mission.id}, this.innerText)" onclick="this.focus()" style="display:inline; min-width: 20px;">${mission.location}</span>
+                    <strong>Ort:</strong> <span class="editable-note" contenteditable="true" 
+                          data-mission-id="${mission.id}" data-field="location"
+                          onblur="saveMissionLocation(${mission.id}, this.innerText)" 
+                          onclick="event.stopPropagation(); this.focus();" 
+                          style="display:inline; min-width: 20px;">${mission.location}</span>
                     ${(mission.initial_location && mission.initial_location !== mission.location) ?
                 `<span class="initial-mission-loc" style="color: #666; font-size: 0.9em; margin-left: 0.5rem;">(Initial: ${mission.initial_location})</span>` : ''}
                 </div>
@@ -1340,10 +1437,15 @@ function renderMissions() {
                 <div class="full-width"><strong>Trupps:</strong> <div style="display:inline-flex; gap:0.5rem; flex-wrap:wrap;">${squadsHtml}</div></div>
                 ${mission.alarming_entity ? `<div><strong>Alarm:</strong> ${mission.alarming_entity}</div>` : ''}
                 ${outcomeHtml}
-                ${mission.description ? `<div class="mission-desc full-width" contenteditable="true" onblur="saveMissionDescription(${mission.id}, this.innerText)" onclick="this.focus()">${mission.description}</div>` : ''}
-                <div class="mission-notes full-width" onclick="const s=this.querySelector('.editable-note'); s.focus();">
+                ${mission.description ? `<div class="mission-desc full-width" contenteditable="true" 
+                    data-mission-id="${mission.id}" data-field="description"
+                    onblur="saveMissionDescription(${mission.id}, this.innerText)" 
+                    onclick="event.stopPropagation(); this.focus();">${mission.description}</div>` : ''}
+                <div class="mission-notes full-width" onclick="event.stopPropagation(); const s=this.querySelector('.editable-note'); s.focus();">
                     <strong>Notizen:</strong> 
-                    <span class="editable-note" contenteditable="true" onblur="saveMissionNote(${mission.id}, this.innerText)">${mission.notes || ''}</span>
+                    <span class="editable-note" contenteditable="true" 
+                          data-mission-id="${mission.id}" data-field="notes"
+                          onblur="saveMissionNote(${mission.id}, this.innerText)">${mission.notes || ''}</span>
                 </div>
             </div>
         `;
@@ -1646,6 +1748,48 @@ function openCompleteMissionModal(id) {
     document.getElementById('arm-type').value = '';
     document.getElementById('arm-note').value = '';
     document.getElementById('complete-mission-modal').classList.add('open');
+}
+
+async function openMissionProtocol(missionId) {
+    const listBody = document.querySelector('#mission-protocol-table tbody');
+    listBody.innerHTML = '<tr><td colspan="3">Lade Daten...</td></tr>';
+    document.getElementById('mission-protocol-modal').classList.add('open');
+
+    try {
+        const response = await fetch(`/api/missions/${missionId}/logs`);
+        const logs = await response.json();
+
+        listBody.innerHTML = '';
+        if (logs.length === 0) {
+            listBody.innerHTML = '<tr><td colspan="3">Keine Einträge vorhanden.</td></tr>';
+            return;
+        }
+
+        logs.forEach(log => {
+            const row = document.createElement('tr');
+
+            // Format Time
+            const date = new Date(log.timestamp);
+            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            // Determine Origin (Squad or User/Action)
+            let origin = log.action;
+            if (log.squad_name) {
+                origin = `<span style="font-weight:bold;">${log.squad_name}</span><br><small>${log.action}</small>`;
+            }
+
+            row.innerHTML = `
+                <td>${timeStr}</td>
+                <td>${origin}</td>
+                <td>${log.details}</td>
+            `;
+            listBody.appendChild(row);
+        });
+
+    } catch (error) {
+        console.error("Error loading mission logs:", error);
+        listBody.innerHTML = '<tr><td colspan="3" style="color:red;">Fehler beim Laden.</td></tr>';
+    }
 }
 
 function toggleArmFields() {
@@ -2022,12 +2166,22 @@ function populateDatalists() {
     for (const [key, values] of Object.entries(optionsData)) {
         const list = document.getElementById(`list-${key}`);
         if (list) {
-            list.innerHTML = '';
-            values.forEach(val => {
-                const opt = document.createElement('option');
-                opt.value = val;
-                list.appendChild(opt);
-            });
+            // Check if current options match new values to avoid unnecessary DOM updates
+            const currentOptions = Array.from(list.children).map(opt => opt.value);
+            const newOptions = values || [];
+
+            // Simple array comparison: same length and every element matches
+            const isSame = currentOptions.length === newOptions.length &&
+                currentOptions.every((val, index) => val === newOptions[index]);
+
+            if (!isSame) {
+                list.innerHTML = '';
+                newOptions.forEach(val => {
+                    const opt = document.createElement('option');
+                    opt.value = val;
+                    list.appendChild(opt);
+                });
+            }
         }
     }
 }

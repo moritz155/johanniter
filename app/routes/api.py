@@ -652,15 +652,11 @@ def update_mission(id):
                          s.custom_location = None
                          squads_to_update_status.append(s)
 
-    # Handle description separately to include content in log
+    # Description update logic moved to below validation block to include content
     if 'description' in data and mission.description != data['description']:
-        changes.append("Lage aktualisiert")
-        mission.description = data['description']
-    
-    if 'notes' in data and mission.notes != data['notes']:
-        if data['notes'] and not mission.notes:
-             changes.append(LogMessages.NOTE_ADDED) # Less spam
-        mission.notes = data['notes']
+        new_desc = data['description']
+        changes.append(f"Lage: {new_desc}")
+        mission.description = new_desc
 
     # Handle other fields
     field_map = {
@@ -737,6 +733,26 @@ def get_changes():
     sid = get_session_id()
     logs = LogEntry.query.filter_by(session_id=sid).order_by(LogEntry.timestamp.desc()).all()
     return jsonify([l.to_dict() for l in logs])
+
+@api_bp.route('/api/missions/<int:id>/logs', methods=['GET'])
+def get_mission_logs(id):
+    sid = get_session_id()
+    # verify mission exists and belongs to session
+    Mission.query.filter_by(id=id, session_id=sid).first_or_404()
+    
+    logs = LogEntry.query.filter_by(mission_id=id, session_id=sid).order_by(LogEntry.timestamp.asc()).all()
+    
+    # We want to enhance logs with squad names if squad_id is present
+    result = []
+    for l in logs:
+        entry = l.to_dict()
+        if l.squad_id:
+            squad = Squad.query.get(l.squad_id)
+            if squad:
+                entry['squad_name'] = squad.name
+        result.append(entry)
+        
+    return jsonify(result)
 
 @api_bp.route('/api/export', methods=['GET'])
 def export_data():
